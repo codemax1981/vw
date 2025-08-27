@@ -4,6 +4,7 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import { ChunkMesher } from './mesher.js';
 import { MobManager } from './mobs.js';
+import { AudioManager } from './audio.js';
 import { worldToChunkCoords, BlockTypes, CHUNK_HEIGHT, WATER_LEVEL } from './utils.js';
 
 
@@ -13,13 +14,17 @@ class Game {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
 
+        // Initialize Audio Manager
+        this.audioManager = new AudioManager(this.camera);
+
         // Initialize worker
         this.worldWorker = new Worker('./world-worker.js');
         this.workerReady = false;
         this.setupWorker();
 
         this.world = new World(this.worldWorker);
-        this.player = new Player(this.camera, this.world);
+        // Pass the audio manager to the player
+        this.player = new Player(this.camera, this.world, this.audioManager);
         this.mesher = new ChunkMesher(this.world);
         this.mobManager = new MobManager(this.scene, this.world);
 
@@ -107,6 +112,9 @@ class Game {
     setupMouseEvents() {
         // Improved pointer lock request
         document.addEventListener('click', () => {
+            // Unlock audio on the very first user click.
+            this.audioManager.unlockAudio();
+
             if (document.pointerLockElement !== document.body &&
                 !this._devMenuOpen && !this._inventoryOpen) {
                 document.body.requestPointerLock();
@@ -137,6 +145,9 @@ class Game {
     breakBlock() {
         const tgt = this.getTargetBlock();
         if (!tgt || tgt.type === BlockTypes.WATER) return;
+      
+        // Play sound effect for breaking a block
+        this.audioManager.playSound('break', 0.6);
       
         // update world data
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
@@ -248,6 +259,9 @@ class Game {
             return;
         }
 
+        // Play sound effect for placing a block
+        this.audioManager.playSound('place', 0.8);
+
         // Place the block
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
 
@@ -309,9 +323,33 @@ class Game {
 
         window.addEventListener('resize', this.onWindowResize.bind(this));
 
+        // Add a cleanup listener for when the user closes the tab
+        window.addEventListener('beforeunload', () => this.cleanup());
+
         this.setupDevMenu();
         this.setupKeyBindings();
+        this.setupAudio();
         this.initialWorldLoad();
+    }
+
+    async setupAudio() {
+        this.updateLoadingProgress(1, "Loading audio...");
+
+        // NOTE: You need to provide these sound files in a 'sounds' folder.
+        const soundsToLoad = {
+            'break': './sounds/break_block.wav',
+            'place': './sounds/place_block.wav',
+            'jump': './sounds/jump.wav',
+            'footstep': './sounds/footstep.wav'
+        };
+
+        try {
+            await this.audioManager.loadSounds(soundsToLoad);
+            // Load the music playlist. It will not play until the audio context is unlocked.
+            this.audioManager.loadMusicPlaylist(['./sounds/subwoofer.mp3'], 0.2);
+        } catch (error) {
+            console.error("Failed to load audio assets. Game will continue without sound.", error);
+        }
     }
 
     setupKeyBindings() {
@@ -492,6 +530,9 @@ class Game {
         requestAnimationFrame(this.animate.bind(this));
         const deltaTime = this.clock.getDelta();
 
+        // Update the audio manager every frame to handle fades
+        this.audioManager.update(deltaTime);
+
         if (!this._devMenuOpen && !this._inventoryOpen) {
             this.player.update(deltaTime);
             this.mobManager.update(deltaTime, this.player.position);
@@ -559,6 +600,7 @@ class Game {
 
     cleanup() {
         this.mobManager.cleanup();
+        this.audioManager.cleanup();
     }
 }
 
