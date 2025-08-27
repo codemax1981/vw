@@ -1,3 +1,5 @@
+
+
 // main.js
 
 import { World } from './world.js';
@@ -5,6 +7,8 @@ import { Player } from './player.js';
 import { ChunkMesher } from './mesher.js';
 import { MobManager } from './mobs.js';
 import { AudioManager } from './audio.js';
+import { TimeManager } from './time.js';
+import { SkyboxManager } from './skybox.js';
 import { worldToChunkCoords, BlockTypes, CHUNK_HEIGHT, WATER_LEVEL } from './utils.js';
 
 
@@ -27,11 +31,18 @@ class Game {
         this.player = new Player(this.camera, this.world, this.audioManager);
         this.mesher = new ChunkMesher(this.world);
         this.mobManager = new MobManager(this.scene, this.world);
+        
+        // --- NEW TIME MANAGER PROPERTIES ---
+        this.timeManager = null;
+        this.skyboxManager = null;
+        this.ambientLight = null;
+        this.directionalLight = null;
 
         this.hud = {
             fps: document.getElementById('fps'),
             position: document.getElementById('position'),
             chunkInfo: document.getElementById('chunkInfo'),
+            time: document.getElementById('time'),
         };
 
         this.loadingScreen = document.getElementById('loading');
@@ -308,18 +319,46 @@ class Game {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setClearColor(0x87CEEB);
+        
+        // --- NEW: Shadow Map Configuration ---
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer, more realistic shadows
 
         const initialFogDist = this.world.renderDistance * 16 * 0.9;
         this.scene.fog = new THREE.Fog(0x87CEEB, 0, initialFogDist);
         this.fogRange.value = initialFogDist;
         this.fogValue.textContent = Math.round(initialFogDist);
 
-        const ambientLight = new THREE.AmbientLight(0xcccccc, 0.6);
-        this.scene.add(ambientLight);
+        // --- STORE LIGHT REFERENCES ---
+        this.ambientLight = new THREE.AmbientLight(0xcccccc, 0.6);
+        this.scene.add(this.ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(1, 1, 0.5).normalize();
-        this.scene.add(directionalLight);
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        this.directionalLight.position.set(1, 1, 0.5).normalize();
+        
+        // --- NEW: Shadow Casting Configuration ---
+        this.directionalLight.castShadow = true;
+        const shadowMapSize = 40; // The area the shadow camera will cover
+        this.directionalLight.shadow.camera.left = -shadowMapSize;
+        this.directionalLight.shadow.camera.right = shadowMapSize;
+        this.directionalLight.shadow.camera.top = shadowMapSize;
+        this.directionalLight.shadow.camera.bottom = -shadowMapSize;
+        this.directionalLight.shadow.camera.near = 0.5;
+        this.directionalLight.shadow.camera.far = 500;
+        this.directionalLight.shadow.mapSize.width = 2048; // Higher resolution for sharper shadows
+        this.directionalLight.shadow.mapSize.height = 2048;
+
+        this.scene.add(this.directionalLight);
+
+        // --- INITIALIZE TIME MANAGER ---
+        this.timeManager = new TimeManager(this.scene, this.renderer, this.directionalLight, this.ambientLight);
+        
+        // --- NEW: INITIALIZE SKYBOX MANAGER ---
+        this.skyboxManager = new SkyboxManager(this.scene, this.renderer, this.camera, this.timeManager);
+        this.timeManager.setSkyboxManager(this.skyboxManager);
+        
+        // Disable default clear color since skybox handles it
+        this.renderer.autoClear = false;
 
         window.addEventListener('resize', this.onWindowResize.bind(this));
 
@@ -530,6 +569,15 @@ class Game {
         requestAnimationFrame(this.animate.bind(this));
         const deltaTime = this.clock.getDelta();
 
+        // --- UPDATE TIME MANAGER (which now updates skybox) ---
+        if (this.timeManager) {
+            this.timeManager.update(deltaTime, this.player.position);
+            
+            // Update fog color to match time of day
+            const fogColor = this.timeManager.getFogColor();
+            this.scene.fog.color.copy(fogColor);
+        }
+
         // Update the audio manager every frame to handle fades
         this.audioManager.update(deltaTime);
 
@@ -537,6 +585,14 @@ class Game {
             this.player.update(deltaTime);
             this.mobManager.update(deltaTime, this.player.position);
         }
+        
+        // --- NEW: Update shadow camera to follow player ---
+        // This ensures the shadow quality is highest around the player.
+        const shadowTarget = this.player.position.clone();
+        this.directionalLight.target.position.copy(shadowTarget);
+        this.directionalLight.position.copy(shadowTarget).add(this.timeManager.sunLight.position);
+        this.directionalLight.target.updateMatrixWorld();
+        this.directionalLight.shadow.camera.updateProjectionMatrix();
         
         const now = performance.now();
         if (now - this.lastChunkUpdate > 1000) {
@@ -550,6 +606,8 @@ class Game {
             this.lastHUDUpdate = now;
         }
 
+        // Manual render order for skybox
+        this.renderer.clear();
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -590,6 +648,10 @@ class Game {
         this.hud.fps.textContent = `FPS: ${Math.round(1 / deltaTime)}`;
         const pos = this.player.position;
         this.hud.position.textContent = `Pos: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
+        // --- UPDATE TIME DISPLAY ---
+        if (this.timeManager) {
+            this.hud.time.textContent = `Time: ${this.timeManager.getFormattedTime()}`;
+        }
     }
 
     onWindowResize() {
@@ -601,6 +663,9 @@ class Game {
     cleanup() {
         this.mobManager.cleanup();
         this.audioManager.cleanup();
+        if (this.skyboxManager) {
+            this.skyboxManager.cleanup();
+        }
     }
 }
 

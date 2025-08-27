@@ -258,3 +258,14 @@ body.loaded #loading {
     top: 115px;
     left: 10px;
 }
+
+#time {
+    top: 115px;
+    left: 10px;
+}
+
+/* Adjust the existing #chunkInfo rule to move it down */
+#chunkInfo {
+    top: 150px; /* Was 80px */
+    left: 10px;
+}
