@@ -1,4 +1,4 @@
-// world.js
+
 
 import { Noise, BlockTypes, chunkKey, worldToChunkCoords, CHUNK_SIZE, CHUNK_HEIGHT, WATER_LEVEL } from './utils.js';
 
@@ -33,7 +33,7 @@ class Chunk {
     this.generating = false;
   }
 
-  // Keep the old generate method for fallback/initial load
+
   generate() {
     if (this.generated || !this.world.noise) return;
     
@@ -171,7 +171,7 @@ export class World {
     return chunk.getBlock(localX, worldY, localZ);
   }
 
-  // Add this method to your World class in world.js
+ 
 setBlock(worldX, worldY, worldZ, blockType) {
     if (worldY < 0 || worldY >= CHUNK_HEIGHT) return;
     
@@ -224,4 +224,5 @@ setBlock(worldX, worldY, worldZ, blockType) {
   getLoadedChunks() {
     return Array.from(this.chunks.values()).filter(chunk => chunk.generated);
   }
+
 }
