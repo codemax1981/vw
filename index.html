@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div class="loading-title">Voxel World</div>
+        <div id="progressBarContainer">
+            <div id="progressBar"></div>
+        </div>
+        <div id="loadingProgress">Waking up the world worker...</div>
+    </div>
+
+    <!-- Game HUD -->
+    <div id="hud">
+        <div id="crosshair">+</div>
+        <div id="fps">FPS: 0</div>
+        <div id="position">Pos: (0, 0, 0)</div>
+        <div id="chunkInfo">Chunk: (0, 0) | Loaded: 0</div>
+        
+        
+        <div id="instructions">
+            WASD: Move | Mouse: Look | Left Click: Break | Right Click: Place<br>
+            E: Inventory | 1-6: Quick Select | \: Dev Menu
+        </div>
+    </div>
+
+    <!-- Selected Block Indicator -->
+    <div id="selectedBlock">
+        <div id="selectedBlockDisplay">Dirt</div>
+    </div>
+
+    <!-- Inventory UI -->
+    <div id="inventoryUI" style="display: none;">
+        <h2>Inventory</h2>
+        <div id="blockSelector">
+            <div class="block-item" data-block="1" style="background-color: #8B4513;">Dirt</div>
+            <div class="block-item" data-block="2" style="background-color: #228B22;">Grass</div>
+            <div class="block-item" data-block="3" style="background-color: #F4A460;">Sand</div>
+            <div class="block-item" data-block="4" style="background-color: #654321;">Log</div>
+            <div class="block-item" data-block="5" style="background-color: #32CD32;">Leaves</div>
+            <div class="block-item" data-block="6" style="background-color: #4169E1;">Water</div>
+        </div>
+    </div>
+
+    <!-- Developer Menu -->
+    <div id="devMenu" style="display: none;">
+        <h2>Developer Tools</h2>
+        <label for="fogRange">Fog Distance: <span id="fogValue">96</span></label>
+        <input type="range" id="fogRange" min="50" max="200" value="96">
+        <button id="closeDevMenu">Close</button>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
