@@ -5,6 +5,22 @@ const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 64;
 const WATER_LEVEL = 28;
 
+// --- NEW: World Generation Parameters for easy tweaking ---
+const BASE_HEIGHT = 32; // The average ground level
+
+// Hill/Mountain settings
+const TERRAIN_BASE_SCALE = 0.01; // Main terrain noise
+const TERRAIN_DETAIL_SCALE = 0.05; // Finer details on the terrain
+const HILL_SCALE = 0.005; // Very low frequency for large hills/mountains
+const TERRAIN_BASE_AMPLITUDE = 20;
+const TERRAIN_DETAIL_AMPLITUDE = 5;
+const HILL_AMPLITUDE = 30; // Hills can be up to 30 blocks high
+
+// River settings
+const RIVER_SCALE = 0.004; // Frequency of the river noise
+const RIVER_THRESHOLD = 0.025; // How wide the rivers are. Smaller = thinner rivers.
+const RIVER_DEPTH = 6; // How deep the rivers carve into the terrain
+
 const BlockTypes = {
   AIR: 0,
   DIRT: 1,
@@ -15,7 +31,7 @@ const BlockTypes = {
   WATER: 6
 };
 
-// ... (Keep the Noise class exactly as it is) ...
+// ... (The Noise class remains exactly the same) ...
 class Noise {
   constructor(seed = Math.random()) {
     this.seed = seed;
@@ -66,13 +82,11 @@ class Noise {
 
 let noise;
 
-// --- TREE GENERATION LOGIC ---
+// --- TREE GENERATION LOGIC (Unchanged) ---
 
-// Helper to set a block in the 1D array, with bounds checking
 function setBlock(blocks, x, y, z, blockType) {
     if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
-        // Only place leaves in the air to avoid burying trees
         if (blockType === BlockTypes.LEAVES && blocks[idx] !== BlockTypes.AIR) {
             return;
         }
@@ -80,7 +94,6 @@ function setBlock(blocks, x, y, z, blockType) {
     }
 }
 
-// Helper to find the ground level at a specific X, Z
 function findGroundLevel(blocks, x, z) {
     for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
@@ -93,23 +106,16 @@ function findGroundLevel(blocks, x, z) {
 
 function generateOakTree(blocks, x, z, groundY) {
     const treeHeight = 5 + Math.floor(Math.random() * 3);
-
-    // Generate trunk
     for (let y = 1; y <= treeHeight; y++) {
         setBlock(blocks, x, groundY + y, z, BlockTypes.LOG);
     }
-
-    // Generate a more organic, blob-like canopy
     const canopyCenterY = groundY + treeHeight;
     const canopyRadius = 2.5 + Math.random() * 0.5;
-
     for (let ly = -3; ly <= 3; ly++) {
         for (let lx = -3; lx <= 3; lx++) {
             for (let lz = -3; lz <= 3; lz++) {
                 const dist = Math.sqrt(lx * lx + ly * ly + lz * lz);
-                // Create a slightly randomized spherical shape
                 if (dist < canopyRadius && Math.random() > 0.1) {
-                    // Don't replace the top of the trunk with leaves
                     if (lx === 0 && lz === 0 && ly >= 0) continue;
                     setBlock(blocks, x + lx, canopyCenterY + ly, z + lz, BlockTypes.LEAVES);
                 }
@@ -118,28 +124,18 @@ function generateOakTree(blocks, x, z, groundY) {
     }
 }
 
-// --- MODIFIED: PINE TREE FUNCTION REMOVED ---
-
 function generateTrees(blocks, chunkX, chunkZ) {
     const worldX = chunkX * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE;
-    
-    // Increase attempts per chunk for a better chance of spawning
     for (let i = 0; i < 8; i++) {
-        const x = Math.floor(Math.random() * 14) + 1; // Keep a 1-block border
+        const x = Math.floor(Math.random() * 14) + 1;
         const z = Math.floor(Math.random() * 14) + 1;
-        
         const wx = worldX + x;
         const wz = worldZ + z;
-        
-        // Use noise to create natural-feeling forest patches
         const treeNoise = noise.noise2D(wx * 0.1, wz * 0.1);
-        
-        if (treeNoise > 0.4) { // Adjusted threshold
+        if (treeNoise > 0.4) {
             const groundY = findGroundLevel(blocks, x, z);
             if (groundY === -1) continue;
-
-            // --- MODIFIED: Always generate an Oak tree now ---
             generateOakTree(blocks, x, z, groundY);
         }
     }
@@ -163,41 +159,68 @@ onmessage = function(e) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
         const wx = worldX + x;
         const wz = worldZ + z;
-        const height1 = noise.noise2D(wx * 0.01, wz * 0.01) * 20;
-        const height2 = noise.noise2D(wx * 0.05, wz * 0.05) * 5;
-        const height = Math.floor(35 + height1 + height2);
+
+        // --- TERRAIN HEIGHT CALCULATION (REWORKED) ---
+
+        // 1. Base terrain and detail noise
+        const baseNoise = noise.noise2D(wx * TERRAIN_BASE_SCALE, wz * TERRAIN_BASE_SCALE) * TERRAIN_BASE_AMPLITUDE;
+        const detailNoise = noise.noise2D(wx * TERRAIN_DETAIL_SCALE, wz * TERRAIN_DETAIL_SCALE) * TERRAIN_DETAIL_AMPLITUDE;
         
+        // 2. Large scale hill/mountain noise
+        const hillNoise = noise.noise2D(wx * HILL_SCALE, wz * HILL_SCALE) * HILL_AMPLITUDE;
+        
+        let height = BASE_HEIGHT + baseNoise + detailNoise + hillNoise;
+
+        // 3. River generation
+        let isRiver = false;
+        // Get a noise value and use its absolute value. The valleys where the value is close to 0 will be our rivers.
+        const riverValue = Math.abs(noise.noise2D(wx * RIVER_SCALE, wz * RIVER_SCALE));
+        
+        if (riverValue < RIVER_THRESHOLD) {
+          isRiver = true;
+          // The closer to the center of the river (riverValue closer to 0), the deeper it is.
+          const riverInfluence = (RIVER_THRESHOLD - riverValue) / RIVER_THRESHOLD;
+          height -= riverInfluence * RIVER_DEPTH;
+          // Make the river valley a bit wider and smoother
+          height -= Math.pow(riverInfluence, 2) * 5;
+        }
+
+        height = Math.floor(height);
+        
+        // --- BLOCK PLACEMENT LOGIC (UPDATED) ---
         for (let y = 0; y < CHUNK_HEIGHT; y++) {
           const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
           
           if (y < height - 3) {
-            blocks[idx] = BlockTypes.DIRT;
+            blocks[idx] = BlockTypes.DIRT; // Deep underground is dirt
           } else if (y < height) {
-            if (height <= WATER_LEVEL + 2) {
-              blocks[idx] = BlockTypes.SAND;
+            // Near the surface, could be sand or dirt
+            if (isRiver && height <= WATER_LEVEL + 2) {
+                blocks[idx] = BlockTypes.SAND; // Sandy riverbeds
             } else {
-              blocks[idx] = BlockTypes.DIRT;
+                blocks[idx] = BlockTypes.DIRT;
             }
           } else if (y === height) {
+            // This is the surface block
             if (y > WATER_LEVEL) {
-              if (y <= WATER_LEVEL + 2) {
-                blocks[idx] = BlockTypes.SAND;
+              if (y <= WATER_LEVEL + 2 || (isRiver && y <= WATER_LEVEL + 4)) {
+                blocks[idx] = BlockTypes.SAND; // Beaches and riverbanks
               } else {
-                blocks[idx] = BlockTypes.GRASS;
+                blocks[idx] = BlockTypes.GRASS; // Default grass
               }
             } else {
-              blocks[idx] = BlockTypes.SAND;
+              blocks[idx] = BlockTypes.SAND; // Ground below water level is sand
             }
           } else if (y <= WATER_LEVEL) {
-            blocks[idx] = BlockTypes.WATER;
+            blocks[idx] = BlockTypes.WATER; // Fill up to water level
           } else {
-            blocks[idx] = BlockTypes.AIR;
+            blocks[idx] = BlockTypes.AIR; // Anything above is air
           }
         }
       }
     }
     
-    // Generate trees using the updated system
+    // Generate trees after the main terrain is set
     generateTrees(blocks, chunkX, chunkZ);
     
     postMessage({ cmd: 'chunk', chunkX, chunkZ, blocks }, [blocks.buffer]);
