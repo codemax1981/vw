@@ -4,7 +4,8 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import { ChunkMesher } from './mesher.js';
 import { MobManager } from './mobs.js';
-import { worldToChunkCoords, BlockTypes } from './utils.js';
+// --- ADDED IMPORT ---
+import { worldToChunkCoords, BlockTypes, CHUNK_HEIGHT, WATER_LEVEL } from './utils.js';
 
 
 class Game {
@@ -100,7 +101,7 @@ class Game {
         // Initialize worker with seed
         this.worldWorker.postMessage({
             cmd: 'init',
-            data: { seed: Date.now() }
+            data: { seed: Math.random() }
         });
     }
     
@@ -331,6 +332,8 @@ class Game {
         this.initialWorldLoad();
     }
 
+
+
     setupKeyBindings() {
         window.addEventListener('keydown', (e) => {
             // Block type selection (1-6)
@@ -452,11 +455,59 @@ class Game {
         await new Promise(resolve => setTimeout(resolve, 50)); 
         this.updateChunkMeshes();
 
-        // --- Stage 4: Finalize and spawn the player ---
+        // --- Stage 4: Finalize and spawn the player (REWORKED) ---
         this.updateLoadingProgress(95, "Finding a safe place to land...");
-        let spawnY = 63;
-        while (this.world.getBlock(0, spawnY, 0) === 0 && spawnY > 0) spawnY--;
-        this.player.position.set(0.5, spawnY + 2, 0.5);
+        
+        let spawnPos = null;
+        const maxSearchRadius = 32; // Search up to 32 blocks away from origin
+
+        // Spiral search outwards from (0,0)
+        for (let radius = 0; radius < maxSearchRadius && !spawnPos; radius++) {
+            for (let i = -radius; i <= radius && !spawnPos; i++) {
+                for (let j = -radius; j <= radius && !spawnPos; j++) {
+                    // Only check the perimeter of the current search radius
+                    if (Math.abs(i) !== radius && Math.abs(j) !== radius) continue;
+
+                    const checkX = i;
+                    const checkZ = j;
+
+                    // Find the ground level at this coordinate
+                    let groundY = -1;
+                    for (let y = CHUNK_HEIGHT - 1; y > 0; y--) {
+                        const block = this.world.getBlock(checkX, y, checkZ);
+                        // A valid ground block is not air, water, or leaves
+                        if (block !== BlockTypes.AIR && block !== BlockTypes.WATER && block !== BlockTypes.LEAVES) {
+                            groundY = y;
+                            break;
+                        }
+                    }
+
+                    // Check if this is a valid spawn point
+                    if (groundY > WATER_LEVEL) {
+                        const surfaceBlock = this.world.getBlock(checkX, groundY, checkZ);
+                        // Must be on grass or sand
+                        if (surfaceBlock === BlockTypes.GRASS || surfaceBlock === BlockTypes.SAND) {
+                            const blockAbove1 = this.world.getBlock(checkX, groundY + 1, checkZ);
+                            const blockAbove2 = this.world.getBlock(checkX, groundY + 2, checkZ);
+                            // Must have clear space for the player
+                            if (blockAbove1 === BlockTypes.AIR && blockAbove2 === BlockTypes.AIR) {
+                                spawnPos = { x: checkX, y: groundY, z: checkZ };
+                                console.log(`Found safe spawn at (${checkX}, ${groundY}, ${checkZ})`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no safe spot is found (e.g., entire spawn is an ocean), use a fallback.
+        if (!spawnPos) {
+            console.warn("Could not find a safe spawn point! Defaulting to origin.");
+            spawnPos = { x: 0, y: 60, z: 0 };
+        }
+
+        // Set player position slightly above the ground
+        this.player.position.set(spawnPos.x + 0.5, spawnPos.y + 1, spawnPos.z + 0.5);
 
         this.updateLoadingProgress(100, "Done!");
 
