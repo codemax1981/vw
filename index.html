@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,8 +56,14 @@
     <!-- Developer Menu -->
     <div id="devMenu" style="display: none;">
         <h2>Developer Tools</h2>
+        <button id="toggleFlyMode">Toggle Fly (Off)</button>
+        <hr style="margin: 12px 0;">
+        <label for="renderDistance">Render Distance: <span id="renderValue">6</span></label>
+        <input type="range" id="renderDistance" min="2" max="12" value="6">
+        <hr style="margin: 12px 0;">
         <label for="fogRange">Fog Distance: <span id="fogValue">96</span></label>
         <input type="range" id="fogRange" min="50" max="200" value="96">
+        <hr style="margin: 12px 0;">
         <button id="closeDevMenu">Close</button>
     </div>
 

@@ -9,6 +9,12 @@ export class Player {
         this.position = new THREE.Vector3(0, 50, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.onGround = false;
+        
+        // --- NEW PROPERTIES ---
+        this.isFlying = false;
+        this.flySpeed = 15.0;
+        // --- END NEW PROPERTIES ---
+
         this.speed = 5.0;
         this.jumpSpeed = 8.0;
         this.gravity = -20.0;
@@ -26,8 +32,8 @@ export class Player {
         this.mouseMovement = { x: 0, y: 0 };
         
         // Collision settings
-        this.stepHeight = 0.6; // Maximum step height
-        this.skinWidth = 0.015; // Small buffer to prevent floating point issues
+        this.stepHeight = 0.6;
+        this.skinWidth = 0.015;
         
         this.setupControls();
     }
@@ -44,10 +50,28 @@ export class Player {
         });
     }
 
+    // --- NEW METHOD ---
+    toggleFly() {
+        this.isFlying = !this.isFlying;
+        // Reset vertical velocity when stopping flight to prevent falling
+        if (!this.isFlying) {
+            this.velocity.y = 0;
+        }
+        return this.isFlying;
+    }
+
     update(deltaTime) {
         this.handleMouseLook();
-        this.handleMovement(deltaTime);
-        this.applyPhysics(deltaTime);
+        
+        // --- UPDATED LOGIC ---
+        if (this.isFlying) {
+            this.handleFlyMovement(deltaTime);
+        } else {
+            this.handleMovement(deltaTime);
+            this.applyPhysics(deltaTime);
+        }
+        // --- END UPDATED LOGIC ---
+
         this.updateCameraPosition();
     }
 
@@ -57,6 +81,28 @@ export class Player {
         this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
         this.mouseMovement.x = 0;
         this.mouseMovement.y = 0;
+    }
+
+    // --- NEW METHOD for flying ---
+    handleFlyMovement(deltaTime) {
+        const forward = new THREE.Vector3();
+        this.camera.getWorldDirection(forward); // Use camera direction for up/down movement
+        const right = new THREE.Vector3().crossVectors(this.camera.up, forward).normalize();
+        const moveVector = new THREE.Vector3();
+
+        if (this.keys['KeyW']) moveVector.add(forward);
+        if (this.keys['KeyS']) moveVector.sub(forward);
+        if (this.keys['KeyD']) moveVector.add(right);
+        if (this.keys['KeyA']) moveVector.sub(right);
+        if (this.keys['Space']) moveVector.y += 1;
+        if (this.keys['ShiftLeft']) moveVector.y -= 1;
+
+        if (moveVector.length() > 0) {
+            moveVector.normalize();
+        }
+
+        // Flying is like noclip, we move directly without physics/collision
+        this.position.add(moveVector.multiplyScalar(this.flySpeed * deltaTime));
     }
 
     handleMovement(deltaTime) {
@@ -80,6 +126,7 @@ export class Player {
         }
     }
 
+    // ... (rest of the file is unchanged)
     applyPhysics(deltaTime) {
         // Apply gravity
         this.velocity.y += this.gravity * deltaTime;

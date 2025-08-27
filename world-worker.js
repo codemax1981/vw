@@ -5,21 +5,24 @@ const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 64;
 const WATER_LEVEL = 28;
 
-// --- NEW: World Generation Parameters for easy tweaking ---
-const BASE_HEIGHT = 32; // The average ground level
+// --- ADVANCED WORLD GENERATION PARAMETERS ---
 
-// Hill/Mountain settings
-const TERRAIN_BASE_SCALE = 0.01; // Main terrain noise
-const TERRAIN_DETAIL_SCALE = 0.05; // Finer details on the terrain
-const HILL_SCALE = 0.005; // Very low frequency for large hills/mountains
-const TERRAIN_BASE_AMPLITUDE = 20;
-const TERRAIN_DETAIL_AMPLITUDE = 5;
-const HILL_AMPLITUDE = 30; // Hills can be up to 30 blocks high
+// Biome settings
+const BIOME_SCALE = 0.003; // How large biomes are. Smaller number = larger biomes.
+const PLAINS_HEIGHT = 29;
+const HILLS_HEIGHT = 38;
+const MOUNTAIN_HEIGHT = 55;
 
-// River settings
-const RIVER_SCALE = 0.004; // Frequency of the river noise
-const RIVER_THRESHOLD = 0.025; // How wide the rivers are. Smaller = thinner rivers.
-const RIVER_DEPTH = 6; // How deep the rivers carve into the terrain
+// Terrain detail settings
+const TERRAIN_DETAIL_SCALE = 0.05; // Controls the small bumps and details on the surface.
+const TERRAIN_DETAIL_AMPLITUDE = 4;
+const MOUNTAIN_RUGGEDNESS_SCALE = 0.02; // Extra noise for mountains to make them jagged.
+const MOUNTAIN_RUGGEDNESS_AMPLITUDE = 10;
+
+// Lake settings
+const LAKE_SCALE = 0.008; // How large lakes are.
+const LAKE_THRESHOLD = 0.6; // 0.0 to 1.0. Higher = fewer, smaller lakes.
+const LAKE_DEPTH = 15; // Maximum depth of lakes.
 
 const BlockTypes = {
   AIR: 0,
@@ -31,7 +34,7 @@ const BlockTypes = {
   WATER: 6
 };
 
-// ... (The Noise class remains exactly the same) ...
+// --- Perlin Noise Generator (2D only) ---
 class Noise {
   constructor(seed = Math.random()) {
     this.seed = seed;
@@ -55,6 +58,7 @@ class Noise {
 
   fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
   lerp(a, b, t) { return a + t * (b - a); }
+  
   grad(hash, x, y) {
     const h = hash & 15;
     const u = h < 8 ? x : y;
@@ -79,11 +83,15 @@ class Noise {
   }
 }
 
-
 let noise;
 
-// --- TREE GENERATION LOGIC (Unchanged) ---
+// --- HELPER FUNCTION ---
+function smoothstep(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+}
 
+// --- TREE GENERATION LOGIC (Unchanged) ---
 function setBlock(blocks, x, y, z, blockType) {
     if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
@@ -93,7 +101,6 @@ function setBlock(blocks, x, y, z, blockType) {
         blocks[idx] = blockType;
     }
 }
-
 function findGroundLevel(blocks, x, z) {
     for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
@@ -103,7 +110,6 @@ function findGroundLevel(blocks, x, z) {
     }
     return -1;
 }
-
 function generateOakTree(blocks, x, z, groundY) {
     const treeHeight = 5 + Math.floor(Math.random() * 3);
     for (let y = 1; y <= treeHeight; y++) {
@@ -123,7 +129,6 @@ function generateOakTree(blocks, x, z, groundY) {
         }
     }
 }
-
 function generateTrees(blocks, chunkX, chunkZ) {
     const worldX = chunkX * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE;
@@ -142,6 +147,7 @@ function generateTrees(blocks, chunkX, chunkZ) {
 }
 
 
+// --- WORKER MESSAGE HANDLER ---
 onmessage = function(e) {
   const { cmd, data } = e.data;
   
@@ -155,72 +161,66 @@ onmessage = function(e) {
     const worldX = chunkX * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE;
     
+    // --- TERRAIN GENERATION PASS ---
     for (let x = 0; x < CHUNK_SIZE; x++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
         const wx = worldX + x;
         const wz = worldZ + z;
 
-        // --- TERRAIN HEIGHT CALCULATION (REWORKED) ---
+        // Step 1: Determine biome characteristics
+        const biomeNoise = (noise.noise2D(wx * BIOME_SCALE, wz * BIOME_SCALE) + 1) / 2; // 0-1
+        
+        // Blend between plains and hills
+        const plainsToHills = smoothstep(0.3, 0.5, biomeNoise);
+        let baseHeight = noise.lerp(PLAINS_HEIGHT, HILLS_HEIGHT, plainsToHills);
+        
+        // Blend between hills and mountains
+        const hillsToMountains = smoothstep(0.6, 0.8, biomeNoise);
+        baseHeight = noise.lerp(baseHeight, MOUNTAIN_HEIGHT, hillsToMountains);
 
-        // 1. Base terrain and detail noise
-        const baseNoise = noise.noise2D(wx * TERRAIN_BASE_SCALE, wz * TERRAIN_BASE_SCALE) * TERRAIN_BASE_AMPLITUDE;
-        const detailNoise = noise.noise2D(wx * TERRAIN_DETAIL_SCALE, wz * TERRAIN_DETAIL_SCALE) * TERRAIN_DETAIL_AMPLITUDE;
+        // Step 2: Add terrain details and ruggedness
+        let detailNoise = noise.noise2D(wx * TERRAIN_DETAIL_SCALE, wz * TERRAIN_DETAIL_SCALE) * TERRAIN_DETAIL_AMPLITUDE;
+        let ruggedness = noise.noise2D(wx * MOUNTAIN_RUGGEDNESS_SCALE, wz * MOUNTAIN_RUGGEDNESS_SCALE) * MOUNTAIN_RUGGEDNESS_AMPLITUDE * hillsToMountains;
         
-        // 2. Large scale hill/mountain noise
-        const hillNoise = noise.noise2D(wx * HILL_SCALE, wz * HILL_SCALE) * HILL_AMPLITUDE;
-        
-        let height = BASE_HEIGHT + baseNoise + detailNoise + hillNoise;
+        let surfaceHeight = baseHeight + detailNoise + ruggedness;
 
-        // 3. River generation
-        let isRiver = false;
-        // Get a noise value and use its absolute value. The valleys where the value is close to 0 will be our rivers.
-        const riverValue = Math.abs(noise.noise2D(wx * RIVER_SCALE, wz * RIVER_SCALE));
-        
-        if (riverValue < RIVER_THRESHOLD) {
-          isRiver = true;
-          // The closer to the center of the river (riverValue closer to 0), the deeper it is.
-          const riverInfluence = (RIVER_THRESHOLD - riverValue) / RIVER_THRESHOLD;
-          height -= riverInfluence * RIVER_DEPTH;
-          // Make the river valley a bit wider and smoother
-          height -= Math.pow(riverInfluence, 2) * 5;
+        // Step 3: Carve lakes
+        const lakeNoise = (noise.noise2D(wx * LAKE_SCALE, wz * LAKE_SCALE) + 1) / 2; // 0-1
+        if (lakeNoise > LAKE_THRESHOLD) {
+            const lakeInfluence = (lakeNoise - LAKE_THRESHOLD) / (1.0 - LAKE_THRESHOLD);
+            surfaceHeight -= lakeInfluence * LAKE_DEPTH;
         }
 
-        height = Math.floor(height);
-        
-        // --- BLOCK PLACEMENT LOGIC (UPDATED) ---
+        surfaceHeight = Math.floor(surfaceHeight);
+
+        // Step 4: Place initial blocks (dirt, grass, sand, water)
         for (let y = 0; y < CHUNK_HEIGHT; y++) {
           const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
           
-          if (y < height - 3) {
-            blocks[idx] = BlockTypes.DIRT; // Deep underground is dirt
-          } else if (y < height) {
-            // Near the surface, could be sand or dirt
-            if (isRiver && height <= WATER_LEVEL + 2) {
-                blocks[idx] = BlockTypes.SAND; // Sandy riverbeds
+          if (y < surfaceHeight - 3) {
+            blocks[idx] = BlockTypes.DIRT;
+          } else if (y < surfaceHeight) {
+            blocks[idx] = BlockTypes.DIRT;
+          } else if (y === surfaceHeight) {
+            if (y < WATER_LEVEL) {
+              blocks[idx] = BlockTypes.SAND; // Lakebeds
+            } else if (y <= WATER_LEVEL + 2) {
+              blocks[idx] = BlockTypes.SAND; // Beaches
+            } else if (y > MOUNTAIN_HEIGHT - 5) {
+              blocks[idx] = BlockTypes.DIRT; // Rocky mountain peaks
             } else {
-                blocks[idx] = BlockTypes.DIRT;
-            }
-          } else if (y === height) {
-            // This is the surface block
-            if (y > WATER_LEVEL) {
-              if (y <= WATER_LEVEL + 2 || (isRiver && y <= WATER_LEVEL + 4)) {
-                blocks[idx] = BlockTypes.SAND; // Beaches and riverbanks
-              } else {
-                blocks[idx] = BlockTypes.GRASS; // Default grass
-              }
-            } else {
-              blocks[idx] = BlockTypes.SAND; // Ground below water level is sand
+              blocks[idx] = BlockTypes.GRASS;
             }
           } else if (y <= WATER_LEVEL) {
-            blocks[idx] = BlockTypes.WATER; // Fill up to water level
+            blocks[idx] = BlockTypes.WATER;
           } else {
-            blocks[idx] = BlockTypes.AIR; // Anything above is air
+            blocks[idx] = BlockTypes.AIR;
           }
         }
       }
     }
     
-    // Generate trees after the main terrain is set
+    // --- FINAL PASS: TREES ---
     generateTrees(blocks, chunkX, chunkZ);
     
     postMessage({ cmd: 'chunk', chunkX, chunkZ, blocks }, [blocks.buffer]);

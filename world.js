@@ -123,6 +123,9 @@ export class World {
     this.pendingChunks = new Set();
   }
 
+  setRenderDistance(distance) {
+    this.renderDistance = Math.max(2, distance); // Enforce a minimum
+  }
   onWorkerMessage(msg) {
     if (msg.cmd === 'chunk') {
       const key = chunkKey(msg.chunkX, msg.chunkZ);

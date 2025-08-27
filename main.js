@@ -4,7 +4,6 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import { ChunkMesher } from './mesher.js';
 import { MobManager } from './mobs.js';
-// --- ADDED IMPORT ---
 import { worldToChunkCoords, BlockTypes, CHUNK_HEIGHT, WATER_LEVEL } from './utils.js';
 
 
@@ -43,6 +42,9 @@ class Game {
         this.fogRange = document.getElementById('fogRange');
         this.fogValue = document.getElementById('fogValue');
         this.closeDevMenuBtn = document.getElementById('closeDevMenu');
+        this.toggleFlyBtn = document.getElementById('toggleFlyMode');
+        this.renderDistanceSlider = document.getElementById('renderDistance');
+        this.renderValue = document.getElementById('renderValue');
         this._devMenuOpen = false;
 
         // Tool and inventory system
@@ -52,8 +54,6 @@ class Game {
         this._inventoryOpen = false;
         this.selectedBlockType = BlockTypes.DIRT;
         
-       
-
         this.blockNames = {
             [BlockTypes.DIRT]: 'Dirt',
             [BlockTypes.GRASS]: 'Grass',
@@ -80,7 +80,6 @@ class Game {
         this.setupMouseEvents();
         this.setupInventory();
         
-
         console.log('Game initialized');
     }
 
@@ -105,7 +104,6 @@ class Game {
         });
     }
     
-
     setupMouseEvents() {
         // Improved pointer lock request
         document.addEventListener('click', () => {
@@ -122,10 +120,8 @@ class Game {
 
             e.preventDefault();
             if (e.button === 0) { // Left click - attack/break block
-                console.log('Left click detected - using tool');
                 this.breakBlock();
             } else if (e.button === 2) { // Right click - place block
-                console.log('Right click detected - placing block');
                 this.placeBlock();
             }
         });
@@ -140,18 +136,15 @@ class Game {
 
     breakBlock() {
         const tgt = this.getTargetBlock();
-        if (!tgt) return;                       // nothing hit
-        if (tgt.type === BlockTypes.WATER) return;   // optional rule
+        if (!tgt || tgt.type === BlockTypes.WATER) return;
       
         // update world data
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
       
         // instantly rebuild this chunk and any neighbours on chunk edge
         this.markChunkForRemesh(tgt.x, tgt.y, tgt.z);
-      }
+    }
       
-
-
     setupInventory() {
         if (!this.blockSelector) return;
 
@@ -186,7 +179,6 @@ class Game {
         }
     }
     
-
     getTargetBlock() {
         const direction = new THREE.Vector3();
         this.camera.getWorldDirection(direction);
@@ -205,12 +197,10 @@ class Game {
             const blockType = this.world.getBlock(blockX, blockY, blockZ);
 
             if (blockType !== BlockTypes.AIR && blockType !== BlockTypes.WATER) {
-                console.log(`Found target block at (${blockX}, ${blockY}, ${blockZ}) type: ${blockType}`);
                 return { x: blockX, y: blockY, z: blockZ, type: blockType };
             }
         }
 
-        console.log('No target block found');
         return null;
     }
 
@@ -240,19 +230,10 @@ class Game {
 
     placeBlock() {
         const placePos = this.getPlacePosition();
-        if (!placePos) {
-            console.log('No valid place position found');
-            return;
-        }
-
-        console.log('Placing block at:', placePos, 'type:', this.selectedBlockType);
+        if (!placePos) return;
 
         // Check if there's already a block there
-        const existingBlock = this.world.getBlock(placePos.x, placePos.y, placePos.z);
-        if (existingBlock !== BlockTypes.AIR) {
-            console.log('Space already occupied by block type:', existingBlock);
-            return;
-        }
+        if (this.world.getBlock(placePos.x, placePos.y, placePos.z) !== BlockTypes.AIR) return;
 
         // Simple check: only prevent placing blocks at the exact same position as player's feet or head
         const playerPos = this.player.position;
@@ -264,13 +245,11 @@ class Game {
         // Don't place blocks where the player is standing or where their head is
         if (placePos.x === playerBlockX && placePos.z === playerBlockZ &&
             (placePos.y === playerBlockY || placePos.y === playerHeadY)) {
-            console.log('Cannot place block inside player');
             return;
         }
 
         // Place the block
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
-        console.log('Block placed successfully, remeshing...');
 
         // Force immediate remesh
         this.markChunkForRemesh(placePos.x, placePos.y, placePos.z);
@@ -316,7 +295,10 @@ class Game {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setClearColor(0x87CEEB);
 
-        this.scene.fog = new THREE.Fog(0x87CEEB, 0, this.world.renderDistance * 16 * 0.9);
+        const initialFogDist = this.world.renderDistance * 16 * 0.9;
+        this.scene.fog = new THREE.Fog(0x87CEEB, 0, initialFogDist);
+        this.fogRange.value = initialFogDist;
+        this.fogValue.textContent = Math.round(initialFogDist);
 
         const ambientLight = new THREE.AmbientLight(0xcccccc, 0.6);
         this.scene.add(ambientLight);
@@ -331,8 +313,6 @@ class Game {
         this.setupKeyBindings();
         this.initialWorldLoad();
     }
-
-
 
     setupKeyBindings() {
         window.addEventListener('keydown', (e) => {
@@ -362,16 +342,12 @@ class Game {
     }
 
     setupDevMenu() {
-        // Only bind if elements exist
-        if (!(this.devMenu && this.fogRange && this.fogValue && this.closeDevMenuBtn)) return;
+        if (!this.devMenu) return;
 
-        // Show dev menu on Backslash
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Backslash' && !this._devMenuOpen && !this._inventoryOpen) {
                 this._devMenuOpen = true;
                 this.devMenu.style.display = 'block';
-                this.fogRange.value = Math.round(this.scene.fog.far);
-                this.fogValue.textContent = Math.round(this.scene.fog.far);
                 document.exitPointerLock();
             } else if (e.code === 'Escape') {
                 if (this._devMenuOpen) {
@@ -388,17 +364,39 @@ class Game {
             }
         });
 
-        // Live update fog as user slides
+        this.closeDevMenuBtn.addEventListener('click', () => {
+            this._devMenuOpen = false;
+            this.devMenu.style.display = 'none';
+        });
+
+        // Fly mode button
+        this.toggleFlyBtn.addEventListener('click', () => {
+            const isFlying = this.player.toggleFly();
+            this.toggleFlyBtn.textContent = `Toggle Fly (${isFlying ? 'On' : 'Off'})`;
+        });
+
+        // Render distance slider
+        this.renderDistanceSlider.addEventListener('input', () => {
+            const distance = parseInt(this.renderDistanceSlider.value, 10);
+            this.renderValue.textContent = distance;
+            this.world.setRenderDistance(distance);
+            
+            // Update fog to match new render distance
+            const newFog = distance * 16 * 0.9;
+            this.scene.fog.far = newFog;
+            this.fogRange.value = newFog;
+            this.fogValue.textContent = Math.round(newFog);
+
+            // Immediately update chunks to reflect the change
+            this.updateWorldChunks();
+            this.updateChunkMeshes();
+        });
+
+        // Fog slider
         this.fogRange.addEventListener('input', () => {
             const far = parseInt(this.fogRange.value, 10);
             this.scene.fog.far = far;
             this.fogValue.textContent = far;
-        });
-
-        // Close button
-        this.closeDevMenuBtn.addEventListener('click', () => {
-            this._devMenuOpen = false;
-            this.devMenu.style.display = 'none';
         });
     }
 
@@ -408,7 +406,6 @@ class Game {
     }
 
     async initialWorldLoad() {
-        // --- Stage 1: Wait for the world worker to be ready ---
         this.updateLoadingProgress(5, "Initializing world worker...");
         await new Promise(resolve => {
             const checkWorkerReady = () => {
@@ -418,24 +415,20 @@ class Game {
             checkWorkerReady();
         });
 
-        // --- Stage 2: Asynchronously generate the initial spawn chunks ---
         this.updateLoadingProgress(10, "Generating spawn area...");
-        const initialLoadSize = 3; // A 7x7 chunk area
+        const initialLoadSize = 3;
         const promises = [];
         const totalChunks = Math.pow(initialLoadSize * 2 + 1, 2);
         let chunksGenerated = 0;
 
         for (let x = -initialLoadSize; x <= initialLoadSize; x++) {
             for (let z = -initialLoadSize; z <= initialLoadSize; z++) {
-                // This call requests the chunk from the worker
                 const chunk = this.world.getChunk(x, z);
-
-                // Create a promise that resolves when this specific chunk is generated
                 const p = new Promise(resolve => {
                     const checkGenerated = () => {
                         if (chunk.generated) {
                             chunksGenerated++;
-                            const progress = 10 + (chunksGenerated / totalChunks) * 60; // Allocate 60% of bar to generation
+                            const progress = 10 + (chunksGenerated / totalChunks) * 60;
                             this.updateLoadingProgress(progress, `Generating Chunks... (${chunksGenerated}/${totalChunks})`);
                             resolve();
                         } else {
@@ -447,92 +440,64 @@ class Game {
                 promises.push(p);
             }
         }
-        await Promise.all(promises); // Wait for all generation promises to complete
+        await Promise.all(promises);
 
-        // --- Stage 3: Build the initial geometry (meshing) ---
         this.updateLoadingProgress(75, "Building world geometry...");
-        // A brief pause to allow the UI to update before the potentially blocking mesh operation
         await new Promise(resolve => setTimeout(resolve, 50)); 
         this.updateChunkMeshes();
 
-        // --- Stage 4: Finalize and spawn the player (REWORKED) ---
         this.updateLoadingProgress(95, "Finding a safe place to land...");
-        
         let spawnPos = null;
-        const maxSearchRadius = 32; // Search up to 32 blocks away from origin
-
-        // Spiral search outwards from (0,0)
+        const maxSearchRadius = 32;
         for (let radius = 0; radius < maxSearchRadius && !spawnPos; radius++) {
             for (let i = -radius; i <= radius && !spawnPos; i++) {
                 for (let j = -radius; j <= radius && !spawnPos; j++) {
-                    // Only check the perimeter of the current search radius
                     if (Math.abs(i) !== radius && Math.abs(j) !== radius) continue;
-
-                    const checkX = i;
-                    const checkZ = j;
-
-                    // Find the ground level at this coordinate
+                    const checkX = i, checkZ = j;
                     let groundY = -1;
                     for (let y = CHUNK_HEIGHT - 1; y > 0; y--) {
                         const block = this.world.getBlock(checkX, y, checkZ);
-                        // A valid ground block is not air, water, or leaves
                         if (block !== BlockTypes.AIR && block !== BlockTypes.WATER && block !== BlockTypes.LEAVES) {
                             groundY = y;
                             break;
                         }
                     }
-
-                    // Check if this is a valid spawn point
                     if (groundY > WATER_LEVEL) {
                         const surfaceBlock = this.world.getBlock(checkX, groundY, checkZ);
-                        // Must be on grass or sand
                         if (surfaceBlock === BlockTypes.GRASS || surfaceBlock === BlockTypes.SAND) {
                             const blockAbove1 = this.world.getBlock(checkX, groundY + 1, checkZ);
                             const blockAbove2 = this.world.getBlock(checkX, groundY + 2, checkZ);
-                            // Must have clear space for the player
                             if (blockAbove1 === BlockTypes.AIR && blockAbove2 === BlockTypes.AIR) {
                                 spawnPos = { x: checkX, y: groundY, z: checkZ };
-                                console.log(`Found safe spawn at (${checkX}, ${groundY}, ${checkZ})`);
                             }
                         }
                     }
                 }
             }
         }
-        
-        // If no safe spot is found (e.g., entire spawn is an ocean), use a fallback.
         if (!spawnPos) {
             console.warn("Could not find a safe spawn point! Defaulting to origin.");
             spawnPos = { x: 0, y: 60, z: 0 };
         }
-
-        // Set player position slightly above the ground
         this.player.position.set(spawnPos.x + 0.5, spawnPos.y + 1, spawnPos.z + 0.5);
 
         this.updateLoadingProgress(100, "Done!");
-
-        // --- Fade out the loading screen and start the game ---
         setTimeout(() => {
             document.body.classList.add('loaded');
             this.animate();
-        }, 600); // Give a moment for the user to see "Done!"
+        }, 600);
     }
 
     animate() {
         requestAnimationFrame(this.animate.bind(this));
-
         const deltaTime = this.clock.getDelta();
 
-        // Pause game updates when dev menu or inventory is open
         if (!this._devMenuOpen && !this._inventoryOpen) {
             this.player.update(deltaTime);
             this.mobManager.update(deltaTime, this.player.position);
         }
-
         
-
         const now = performance.now();
-
         if (now - this.lastChunkUpdate > 1000) {
             this.updateWorldChunks();
             this.updateChunkMeshes();
@@ -556,9 +521,6 @@ class Game {
     updateChunkMeshes() {
         for (const chunk of this.world.getLoadedChunks()) {
             if (!chunk.mesh) {
-                // --- FIX STARTS HERE ---
-                // Before meshing, ensure all direct neighbors are generated.
-                // This prevents visual holes at chunk borders (race conditions).
                 let neighborsReady = true;
                 const neighbors = [
                     this.world.getChunk(chunk.x - 1, chunk.z),
@@ -566,14 +528,12 @@ class Game {
                     this.world.getChunk(chunk.x, chunk.z - 1),
                     this.world.getChunk(chunk.x, chunk.z + 1),
                 ];
-
                 for (const neighbor of neighbors) {
                     if (!neighbor || !neighbor.generated) {
                         neighborsReady = false;
                         break;
                     }
                 }
-
                 if (neighborsReady) {
                     const mesh = this.mesher.meshChunk(chunk);
                     if (mesh) {
@@ -581,7 +541,6 @@ class Game {
                         this.scene.add(chunk.mesh);
                     }
                 }
-                // --- FIX ENDS HERE ---
             }
         }
     }
