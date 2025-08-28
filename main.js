@@ -1,5 +1,3 @@
-
-
 // main.js
 
 import { World } from './world.js';
@@ -18,21 +16,16 @@ class Game {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
 
-        // Initialize Audio Manager
         this.audioManager = new AudioManager(this.camera);
-
-        // Initialize worker
         this.worldWorker = new Worker('./world-worker.js');
         this.workerReady = false;
         this.setupWorker();
 
         this.world = new World(this.worldWorker);
-        // Pass the audio manager to the player
-        this.player = new Player(this.camera, this.world, this.audioManager);
-        this.mesher = new ChunkMesher(this.world);
+        this.player = new Player(this.camera, this.world);
+        this.mesher = new ChunkMesher();
         this.mobManager = new MobManager(this.scene, this.world);
         
-        // --- NEW TIME MANAGER PROPERTIES ---
         this.timeManager = null;
         this.skyboxManager = null;
         this.ambientLight = null;
@@ -53,7 +46,6 @@ class Game {
         this.lastChunkUpdate = 0;
         this.lastHUDUpdate = 0;
 
-        // Dev menu fields
         this.devMenu = document.getElementById('devMenu');
         this.fogRange = document.getElementById('fogRange');
         this.fogValue = document.getElementById('fogValue');
@@ -63,7 +55,6 @@ class Game {
         this.renderValue = document.getElementById('renderValue');
         this._devMenuOpen = false;
 
-        // Tool and inventory system
         this.inventoryUI = document.getElementById('inventoryUI');
         this.blockSelector = document.getElementById('blockSelector');
         this.selectedItemDisplay = document.getElementById('selectedBlockDisplay');
@@ -71,35 +62,22 @@ class Game {
         this.selectedBlockType = BlockTypes.DIRT;
         
         this.blockNames = {
-            [BlockTypes.DIRT]: 'Dirt',
-            [BlockTypes.GRASS]: 'Grass',
-            [BlockTypes.SAND]: 'Sand',
-            [BlockTypes.LOG]: 'Log',
-            [BlockTypes.LEAVES]: 'Leaves',
-            [BlockTypes.WATER]: 'Water',
-            [BlockTypes.STONE]: 'Stone',        // NEW
-            [BlockTypes.GRAVEL]: 'Gravel',      // NEW
-            [BlockTypes.COAL_ORE]: 'Coal Ore',  // NEW
-            [BlockTypes.BEDROCK]: 'Bedrock'     // NEW
+            [BlockTypes.DIRT]: 'Dirt', [BlockTypes.GRASS]: 'Grass', [BlockTypes.SAND]: 'Sand',
+            [BlockTypes.LOG]: 'Log', [BlockTypes.LEAVES]: 'Leaves', [BlockTypes.WATER]: 'Water',
+            [BlockTypes.STONE]: 'Stone', [BlockTypes.GRAVEL]: 'Gravel', [BlockTypes.COAL_ORE]: 'Coal Ore',
+            [BlockTypes.BEDROCK]: 'Bedrock'
         };
         
         this.blockColors = {
-            [BlockTypes.DIRT]: '#8B4513',
-            [BlockTypes.GRASS]: '#228B22',
-            [BlockTypes.SAND]: '#F4A460',
-            [BlockTypes.LOG]: '#654321',
-            [BlockTypes.LEAVES]: '#32CD32',
-            [BlockTypes.WATER]: '#4169E1',
-            [BlockTypes.STONE]: '#808080',      // NEW
-            [BlockTypes.GRAVEL]: '#999999',     // NEW
-            [BlockTypes.COAL_ORE]: '#2F2F2F',   // NEW
-            [BlockTypes.BEDROCK]: '#1A1A1A'     // NEW
+            [BlockTypes.DIRT]: '#8B4513', [BlockTypes.GRASS]: '#228B22', [BlockTypes.SAND]: '#F4A460',
+            [BlockTypes.LOG]: '#654321', [BlockTypes.LEAVES]: '#32CD32', [BlockTypes.WATER]: '#4169E1',
+            [BlockTypes.STONE]: '#808080', [BlockTypes.GRAVEL]: '#999999', [BlockTypes.COAL_ORE]: '#2F2F2F',
+            [BlockTypes.BEDROCK]: '#1A1A1A'
         };
 
-        // Raycasting for block interaction
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
-        this.maxReach = 5; // Maximum reach distance
+        this.maxReach = 5;
 
         this.setupMouseEvents();
         this.setupInventory();
@@ -113,15 +91,37 @@ class Game {
             if (cmd === 'ready') {
                 this.workerReady = true;
                 console.log('World worker ready');
-            }
-
-            // Forward to world
-            if (this.world && this.world.onWorkerMessage) {
+            } else if (cmd === 'chunk') {
                 this.world.onWorkerMessage(e.data);
+            } else if (cmd === 'mesh') {
+                const { chunkX, chunkZ, opaqueData, transparentData } = e.data;
+                const chunk = this.world.getChunk(chunkX, chunkZ);
+                if (chunk) {
+                    // --- MODIFIED: ATOMIC SWAP LOGIC ---
+                    // 1. Remove the old mesh if it exists
+                    if (chunk.mesh) {
+                        this.scene.remove(chunk.mesh);
+                        chunk.mesh.traverse(child => {
+                            if (child.geometry) child.geometry.dispose();
+                        });
+                    }
+                    
+                    // 2. Create the new mesh from the worker's data
+                    const newMesh = this.mesher.createMeshFromData(opaqueData, transparentData, chunkX, chunkZ);
+                    
+                    // 3. Add the new mesh to the scene and update the chunk object
+                    if (newMesh) {
+                        chunk.mesh = newMesh;
+                        this.scene.add(newMesh);
+                    } else {
+                        chunk.mesh = null; // Ensure mesh is null if no geometry was created
+                    }
+                    
+                    chunk.isMeshing = false;
+                }
             }
         };
 
-        // Initialize worker with seed
         this.worldWorker.postMessage({
             cmd: 'init',
             data: { seed: Math.random() }
@@ -129,35 +129,22 @@ class Game {
     }
     
     setupMouseEvents() {
-        // Improved pointer lock request
         document.addEventListener('click', () => {
-            // Unlock audio on the very first user click.
             this.audioManager.unlockAudio();
-
-            if (document.pointerLockElement !== document.body &&
-                !this._devMenuOpen && !this._inventoryOpen) {
+            if (document.pointerLockElement !== document.body && !this._devMenuOpen && !this._inventoryOpen) {
                 document.body.requestPointerLock();
             }
         });
 
-        // Mouse events - make sure they're on the right element
         document.addEventListener('mousedown', (e) => {
-            if (document.pointerLockElement !== document.body) return;
-            if (this._devMenuOpen || this._inventoryOpen) return;
-
+            if (document.pointerLockElement !== document.body || this._devMenuOpen || this._inventoryOpen) return;
             e.preventDefault();
-            if (e.button === 0) { // Left click - attack/break block
-                this.breakBlock();
-            } else if (e.button === 2) { // Right click - place block
-                this.placeBlock();
-            }
+            if (e.button === 0) this.breakBlock();
+            else if (e.button === 2) this.placeBlock();
         });
 
-        // Prevent context menu
         document.addEventListener('contextmenu', (e) => {
-            if (document.pointerLockElement === document.body) {
-                e.preventDefault();
-            }
+            if (document.pointerLockElement === document.body) e.preventDefault();
         });
     }
 
@@ -165,20 +152,27 @@ class Game {
         const tgt = this.getTargetBlock();
         if (!tgt || tgt.type === BlockTypes.WATER || tgt.type === BlockTypes.BEDROCK) return;
         
-        // Play sound effect for breaking a block
         this.audioManager.playSound('break', 0.6);
-        
-        // Update world data
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
         
-        // Instantly rebuild this chunk
+        // IMMEDIATE VISUAL FEEDBACK - Remove any temporary blocks at this position
+        const existingTemp = this.scene.children.find(child => 
+            child.userData.isTemporary && 
+            child.userData.blockPosition.x === tgt.x &&
+            child.userData.blockPosition.y === tgt.y &&
+            child.userData.blockPosition.z === tgt.z
+        );
+        if (existingTemp) {
+            this.scene.remove(existingTemp);
+            existingTemp.geometry.dispose();
+            existingTemp.material.dispose();
+        }
+        
         this.markChunkForRemesh(tgt.x, tgt.y, tgt.z);
     }
       
     setupInventory() {
         if (!this.blockSelector) return;
-
-        // Setup block selection
         const blockItems = this.blockSelector.querySelectorAll('.block-item');
         blockItems.forEach(item => {
             item.addEventListener('click', () => {
@@ -186,23 +180,17 @@ class Game {
                 this.selectBlock(blockType);
             });
         });
-
-        // Select first block by default
         this.selectBlock(BlockTypes.DIRT);
     }
 
     selectBlock(blockType) {
         this.selectedBlockType = blockType;
-        
         if (this.blockSelector) {
-            // Update visual selection
             const blockItems = this.blockSelector.querySelectorAll('.block-item');
             blockItems.forEach(item => {
                 item.classList.toggle('selected', parseInt(item.dataset.block) === blockType);
             });
         }
-    
-        // Always update the selected item display
         if (this.selectedItemDisplay) {
             this.selectedItemDisplay.style.backgroundColor = this.blockColors[blockType];
             this.selectedItemDisplay.textContent = this.blockNames[blockType];
@@ -213,8 +201,6 @@ class Game {
         const direction = new THREE.Vector3();
         this.camera.getWorldDirection(direction);
         const origin = this.camera.position.clone();
-
-        // Use smaller steps for better precision
         const step = 0.1;
         const maxSteps = Math.ceil(this.maxReach / step);
 
@@ -230,7 +216,6 @@ class Game {
                 return { x: blockX, y: blockY, z: blockZ, type: blockType };
             }
         }
-
         return null;
     }
 
@@ -254,124 +239,133 @@ class Game {
                 return lastAirPos;
             }
         }
-
         return null;
     }
 
+    createTemporaryBlockMesh(x, y, z, blockType) {
+        if (blockType === BlockTypes.AIR) return null;
+        
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshStandardMaterial({
+            color: this.blockColors[blockType],
+            transparent: blockType === BlockTypes.WATER,
+            opacity: blockType === BlockTypes.WATER ? 0.7 : 1.0
+        });
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.isTemporary = true;
+        mesh.userData.blockPosition = { x, y, z };
+        
+        return mesh;
+    }
+        
     placeBlock() {
         const placePos = this.getPlacePosition();
         if (!placePos) return;
-
-        // Check if there's already a block there
         if (this.world.getBlock(placePos.x, placePos.y, placePos.z) !== BlockTypes.AIR) return;
-
-        // Simple check: only prevent placing blocks at the exact same position as player's feet or head
+    
         const playerPos = this.player.position;
         const playerBlockX = Math.floor(playerPos.x);
         const playerBlockY = Math.floor(playerPos.y);
         const playerBlockZ = Math.floor(playerPos.z);
         const playerHeadY = Math.floor(playerPos.y + this.player.height);
-
-        // Don't place blocks where the player is standing or where their head is
+    
         if (placePos.x === playerBlockX && placePos.z === playerBlockZ &&
             (placePos.y === playerBlockY || placePos.y === playerHeadY)) {
             return;
         }
-
-        // Play sound effect for placing a block
+    
         this.audioManager.playSound('place', 0.8);
-
-        // Place the block
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
-
-        // Force immediate remesh
+        
+        // IMMEDIATE VISUAL FEEDBACK - Add temporary block
+        const tempMesh = this.createTemporaryBlockMesh(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
+        if (tempMesh) {
+            this.scene.add(tempMesh);
+        }
+        
         this.markChunkForRemesh(placePos.x, placePos.y, placePos.z);
+    }
+
+    cleanupTemporaryBlocks(chunkX, chunkZ) {
+        const chunkWorldX = chunkX * 16;
+        const chunkWorldZ = chunkZ * 16;
+        
+        // Remove temporary blocks within this chunk's bounds
+        const tempBlocks = this.scene.children.filter(child => 
+            child.userData.isTemporary &&
+            child.userData.blockPosition.x >= chunkWorldX &&
+            child.userData.blockPosition.x < chunkWorldX + 16 &&
+            child.userData.blockPosition.z >= chunkWorldZ &&
+            child.userData.blockPosition.z < chunkWorldZ + 16
+        );
+        
+        tempBlocks.forEach(tempBlock => {
+            this.scene.remove(tempBlock);
+            tempBlock.geometry.dispose();
+            tempBlock.material.dispose();
+        });
     }
 
     markChunkForRemesh(worldX, worldY, worldZ) {
         const { x: chunkX, z: chunkZ } = worldToChunkCoords(worldX, worldZ);
         this.remeshChunk(chunkX, chunkZ);
 
-        // Also remesh neighboring chunks if block is on edge
-        const localX = worldX - chunkX * 16;
-        const localZ = worldZ - chunkZ * 16;
-
+        const localX = Math.floor(worldX) - chunkX * 16;
+        const localZ = Math.floor(worldZ) - chunkZ * 16;
+        
         if (localX === 0) this.remeshChunk(chunkX - 1, chunkZ);
         if (localX === 15) this.remeshChunk(chunkX + 1, chunkZ);
         if (localZ === 0) this.remeshChunk(chunkX, chunkZ - 1);
         if (localZ === 15) this.remeshChunk(chunkX, chunkZ + 1);
     }
 
+    // --- MODIFIED: This function now only flags the chunk for an update ---
     remeshChunk(chunkX, chunkZ) {
         const chunk = this.world.getChunk(chunkX, chunkZ);
-        if (!chunk || !chunk.generated) return;
-
-        // Remove existing mesh
-        if (chunk.mesh) {
-            this.scene.remove(chunk.mesh);
-            chunk.mesh.children.forEach(child => {
-                child.geometry?.dispose();
-            });
-            chunk.mesh = null;
-        }
-
-        // Create new mesh immediately
-        const newMesh = this.mesher.meshChunk(chunk);
-        if (newMesh) {
-            chunk.mesh = newMesh;
-            this.scene.add(chunk.mesh);
+        if (chunk) {
+            chunk.needsRemesh = true;
         }
     }
     
-
     init() {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setClearColor(0x87CEEB);
-        
-        // --- NEW: Shadow Map Configuration ---
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer, more realistic shadows
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         const initialFogDist = this.world.renderDistance * 16 * 0.9;
         this.scene.fog = new THREE.Fog(0x87CEEB, 0, initialFogDist);
         this.fogRange.value = initialFogDist;
         this.fogValue.textContent = Math.round(initialFogDist);
 
-        // --- STORE LIGHT REFERENCES ---
         this.ambientLight = new THREE.AmbientLight(0xcccccc, 0.6);
         this.scene.add(this.ambientLight);
 
         this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         this.directionalLight.position.set(1, 1, 0.5).normalize();
-        
-        // --- NEW: Shadow Casting Configuration ---
         this.directionalLight.castShadow = true;
-        const shadowMapSize = 40; // The area the shadow camera will cover
+        const shadowMapSize = 40;
         this.directionalLight.shadow.camera.left = -shadowMapSize;
         this.directionalLight.shadow.camera.right = shadowMapSize;
         this.directionalLight.shadow.camera.top = shadowMapSize;
         this.directionalLight.shadow.camera.bottom = -shadowMapSize;
         this.directionalLight.shadow.camera.near = 0.5;
         this.directionalLight.shadow.camera.far = 500;
-        this.directionalLight.shadow.mapSize.width = 2048; // Higher resolution for sharper shadows
+        this.directionalLight.shadow.mapSize.width = 2048;
         this.directionalLight.shadow.mapSize.height = 2048;
-
         this.scene.add(this.directionalLight);
 
-        // --- INITIALIZE TIME MANAGER ---
         this.timeManager = new TimeManager(this.scene, this.renderer, this.directionalLight, this.ambientLight);
-        
-        // --- NEW: INITIALIZE SKYBOX MANAGER ---
         this.skyboxManager = new SkyboxManager(this.scene, this.renderer, this.camera, this.timeManager);
         this.timeManager.setSkyboxManager(this.skyboxManager);
-        
-        // Disable default clear color since skybox handles it
         this.renderer.autoClear = false;
 
         window.addEventListener('resize', this.onWindowResize.bind(this));
-
-        // Add a cleanup listener for when the user closes the tab
         window.addEventListener('beforeunload', () => this.cleanup());
 
         this.setupDevMenu();
@@ -382,57 +376,42 @@ class Game {
 
     async setupAudio() {
         this.updateLoadingProgress(1, "Loading audio...");
-
-        // NOTE: You need to provide these sound files in a 'sounds' folder.
         const soundsToLoad = {
             'break': './sounds/break_block.wav',
             'place': './sounds/place_block.wav',
             'jump': './sounds/jump.wav',
             'footstep': './sounds/footstep.wav'
         };
-
         try {
             await this.audioManager.loadSounds(soundsToLoad);
-            // Load the music playlist. It will not play until the audio context is unlocked.
             this.audioManager.loadMusicPlaylist(['./sounds/subwoofer.mp3'], 0.2);
         } catch (error) {
-            console.error("Failed to load audio assets. Game will continue without sound.", error);
+            console.error("Failed to load audio assets.", error);
         }
     }
 
     setupKeyBindings() {
         window.addEventListener('keydown', (e) => {
-            // Block type selection (1-6)
             const blockKeys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
             const blockTypes = [
                 BlockTypes.DIRT, BlockTypes.GRASS, BlockTypes.SAND, BlockTypes.LOG, 
                 BlockTypes.LEAVES, BlockTypes.WATER, BlockTypes.STONE, BlockTypes.GRAVEL, BlockTypes.COAL_ORE
             ];
-
             const keyIndex = blockKeys.indexOf(e.code);
             if (keyIndex !== -1) {
                 this.selectBlock(blockTypes[keyIndex]);
                 return;
             }
-
-            // Inventory toggle
             if (e.code === 'KeyE' && !this._devMenuOpen) {
                 this._inventoryOpen = !this._inventoryOpen;
-                if (this.inventoryUI) {
-                    this.inventoryUI.style.display = this._inventoryOpen ? 'block' : 'none';
-                }
-                
-                if (this._inventoryOpen) {
-                    document.exitPointerLock();
-                }
-                return;
+                if (this.inventoryUI) this.inventoryUI.style.display = this._inventoryOpen ? 'block' : 'none';
+                if (this._inventoryOpen) document.exitPointerLock();
             }
         });
     }
 
     setupDevMenu() {
         if (!this.devMenu) return;
-
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Backslash' && !this._devMenuOpen && !this._inventoryOpen) {
                 this._devMenuOpen = true;
@@ -443,45 +422,30 @@ class Game {
                     this._devMenuOpen = false;
                     this.devMenu.style.display = 'none';
                 }
-
                 if (this._inventoryOpen) {
                     this._inventoryOpen = false;
-                    if (this.inventoryUI) {
-                        this.inventoryUI.style.display = 'none';
-                    }
+                    if (this.inventoryUI) this.inventoryUI.style.display = 'none';
                 }
             }
         });
-
         this.closeDevMenuBtn.addEventListener('click', () => {
             this._devMenuOpen = false;
             this.devMenu.style.display = 'none';
         });
-
-        // Fly mode button
         this.toggleFlyBtn.addEventListener('click', () => {
             const isFlying = this.player.toggleFly();
             this.toggleFlyBtn.textContent = `Toggle Fly (${isFlying ? 'On' : 'Off'})`;
         });
-
-        // Render distance slider
         this.renderDistanceSlider.addEventListener('input', () => {
             const distance = parseInt(this.renderDistanceSlider.value, 10);
             this.renderValue.textContent = distance;
             this.world.setRenderDistance(distance);
-            
-            // Update fog to match new render distance
             const newFog = distance * 16 * 0.9;
             this.scene.fog.far = newFog;
             this.fogRange.value = newFog;
             this.fogValue.textContent = Math.round(newFog);
-
-            // Immediately update chunks to reflect the change
             this.updateWorldChunks();
-            this.updateChunkMeshes();
         });
-
-        // Fog slider
         this.fogRange.addEventListener('input', () => {
             const far = parseInt(this.fogRange.value, 10);
             this.scene.fog.far = far;
@@ -532,8 +496,19 @@ class Game {
         await Promise.all(promises);
 
         this.updateLoadingProgress(75, "Building world geometry...");
-        await new Promise(resolve => setTimeout(resolve, 50)); 
         this.updateChunkMeshes();
+        await new Promise(resolve => {
+            const checkSpawnChunk = () => {
+                const spawnChunk = this.world.getChunk(0, 0);
+                if (spawnChunk && spawnChunk.mesh) {
+                    resolve();
+                } else {
+                    this.updateChunkMeshes();
+                    setTimeout(checkSpawnChunk, 100);
+                }
+            };
+            checkSpawnChunk();
+        });
 
         this.updateLoadingProgress(95, "Finding a safe place to land...");
         let spawnPos = null;
@@ -581,16 +556,12 @@ class Game {
         requestAnimationFrame(this.animate.bind(this));
         const deltaTime = this.clock.getDelta();
 
-        // --- UPDATE TIME MANAGER (which now updates skybox) ---
         if (this.timeManager) {
             this.timeManager.update(deltaTime, this.player.position);
-            
-            // Update fog color to match time of day
             const fogColor = this.timeManager.getFogColor();
             this.scene.fog.color.copy(fogColor);
         }
 
-        // Update the audio manager every frame to handle fades
         this.audioManager.update(deltaTime);
 
         if (!this._devMenuOpen && !this._inventoryOpen) {
@@ -598,16 +569,13 @@ class Game {
             this.mobManager.update(deltaTime, this.player.position);
         }
         
-        // --- NEW: Update shadow camera to follow player ---
-        // This ensures the shadow quality is highest around the player.
         const shadowTarget = this.player.position.clone();
         this.directionalLight.target.position.copy(shadowTarget);
         this.directionalLight.position.copy(shadowTarget).add(this.timeManager.sunLight.position);
         this.directionalLight.target.updateMatrixWorld();
-        this.directionalLight.shadow.camera.updateProjectionMatrix();
         
         const now = performance.now();
-        if (now - this.lastChunkUpdate > 2000) {
+        if (now - this.lastChunkUpdate > 500) {
             this.updateWorldChunks();
             this.updateChunkMeshes();
             this.lastChunkUpdate = now;
@@ -618,10 +586,11 @@ class Game {
             this.lastHUDUpdate = now;
         }
 
-        // Manual render order for skybox
         this.renderer.clear();
         this.renderer.render(this.scene, this.camera);
     }
+
+
 
     updateWorldChunks() {
         const loadedCount = this.world.updateLoadedChunks(this.player.position.x, this.player.position.z);
@@ -630,26 +599,39 @@ class Game {
     }
 
     updateChunkMeshes() {
-        for (const chunk of this.world.getLoadedChunks()) {
-            if (!chunk.mesh) {
-                let neighborsReady = true;
-                const neighbors = [
-                    this.world.getChunk(chunk.x - 1, chunk.z),
-                    this.world.getChunk(chunk.x + 1, chunk.z),
-                    this.world.getChunk(chunk.x, chunk.z - 1),
-                    this.world.getChunk(chunk.x, chunk.z + 1),
-                ];
-                for (const neighbor of neighbors) {
-                    if (!neighbor || !neighbor.generated) {
-                        neighborsReady = false;
-                        break;
-                    }
-                }
-                if (neighborsReady) {
-                    const mesh = this.mesher.meshChunk(chunk);
-                    if (mesh) {
-                        chunk.mesh = mesh;
-                        this.scene.add(chunk.mesh);
+        for (const chunk of this.world.chunks.values()) {
+            // --- MODIFIED: Condition now checks for needsRemesh flag OR if it has no mesh ---
+            if ((chunk.generated && !chunk.mesh) || chunk.needsRemesh) {
+                if (!chunk.isMeshing) {
+                    const neighbors = {
+                        north: this.world.getChunk(chunk.x, chunk.z + 1),
+                        south: this.world.getChunk(chunk.x, chunk.z - 1),
+                        east: this.world.getChunk(chunk.x + 1, chunk.z),
+                        west: this.world.getChunk(chunk.x - 1, chunk.z),
+                    };
+
+                    const allNeighborsReady = Object.values(neighbors).every(n => n && n.generated);
+
+                    if (allNeighborsReady) {
+                        chunk.isMeshing = true;
+                        chunk.needsRemesh = false; // Reset the flag
+                        
+                        const neighborData = {
+                            north: neighbors.north.blocks,
+                            south: neighbors.south.blocks,
+                            east: neighbors.east.blocks,
+                            west: neighbors.west.blocks,
+                        };
+                        
+                        this.worldWorker.postMessage({
+                            cmd: 'meshChunk',
+                            data: {
+                                chunkX: chunk.x,
+                                chunkZ: chunk.z,
+                                chunkData: chunk.blocks,
+                                neighborData: neighborData
+                            }
+                        });
                     }
                 }
             }
@@ -660,7 +642,6 @@ class Game {
         this.hud.fps.textContent = `FPS: ${Math.round(1 / deltaTime)}`;
         const pos = this.player.position;
         this.hud.position.textContent = `Pos: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
-        // --- UPDATE TIME DISPLAY ---
         if (this.timeManager) {
             this.hud.time.textContent = `Time: ${this.timeManager.getFormattedTime()}`;
         }

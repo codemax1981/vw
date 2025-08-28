@@ -11,6 +11,8 @@ class Chunk {
     this.mesh = null;
     this.generated = false;
     this.generating = false;
+    this.isMeshing = false;
+    this.needsRemesh = false; // Flag to signal an update is needed without deleting the mesh
   }
 
   getBlock(x, y, z) {
@@ -174,8 +176,7 @@ export class World {
     return chunk.getBlock(localX, worldY, localZ);
   }
 
-  // Add this method to your World class in world.js
-setBlock(worldX, worldY, worldZ, blockType) {
+  setBlock(worldX, worldY, worldZ, blockType) {
     if (worldY < 0 || worldY >= CHUNK_HEIGHT) return;
     
     const { x: chunkX, z: chunkZ } = worldToChunkCoords(worldX, worldZ);
