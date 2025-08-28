@@ -76,16 +76,24 @@ class Game {
             [BlockTypes.SAND]: 'Sand',
             [BlockTypes.LOG]: 'Log',
             [BlockTypes.LEAVES]: 'Leaves',
-            [BlockTypes.WATER]: 'Water'
+            [BlockTypes.WATER]: 'Water',
+            [BlockTypes.STONE]: 'Stone',        // NEW
+            [BlockTypes.GRAVEL]: 'Gravel',      // NEW
+            [BlockTypes.COAL_ORE]: 'Coal Ore',  // NEW
+            [BlockTypes.BEDROCK]: 'Bedrock'     // NEW
         };
-
+        
         this.blockColors = {
             [BlockTypes.DIRT]: '#8B4513',
             [BlockTypes.GRASS]: '#228B22',
             [BlockTypes.SAND]: '#F4A460',
             [BlockTypes.LOG]: '#654321',
             [BlockTypes.LEAVES]: '#32CD32',
-            [BlockTypes.WATER]: '#4169E1'
+            [BlockTypes.WATER]: '#4169E1',
+            [BlockTypes.STONE]: '#808080',      // NEW
+            [BlockTypes.GRAVEL]: '#999999',     // NEW
+            [BlockTypes.COAL_ORE]: '#2F2F2F',   // NEW
+            [BlockTypes.BEDROCK]: '#1A1A1A'     // NEW
         };
 
         // Raycasting for block interaction
@@ -155,15 +163,15 @@ class Game {
 
     breakBlock() {
         const tgt = this.getTargetBlock();
-        if (!tgt || tgt.type === BlockTypes.WATER) return;
-      
+        if (!tgt || tgt.type === BlockTypes.WATER || tgt.type === BlockTypes.BEDROCK) return;
+        
         // Play sound effect for breaking a block
         this.audioManager.playSound('break', 0.6);
-      
-        // update world data
+        
+        // Update world data
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
-      
-        // instantly rebuild this chunk and any neighbours on chunk edge
+        
+        // Instantly rebuild this chunk
         this.markChunkForRemesh(tgt.x, tgt.y, tgt.z);
     }
       
@@ -314,6 +322,7 @@ class Game {
             this.scene.add(chunk.mesh);
         }
     }
+    
 
     init() {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -394,8 +403,11 @@ class Game {
     setupKeyBindings() {
         window.addEventListener('keydown', (e) => {
             // Block type selection (1-6)
-            const blockKeys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'];
-            const blockTypes = [BlockTypes.DIRT, BlockTypes.GRASS, BlockTypes.SAND, BlockTypes.LOG, BlockTypes.LEAVES, BlockTypes.WATER];
+            const blockKeys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
+            const blockTypes = [
+                BlockTypes.DIRT, BlockTypes.GRASS, BlockTypes.SAND, BlockTypes.LOG, 
+                BlockTypes.LEAVES, BlockTypes.WATER, BlockTypes.STONE, BlockTypes.GRAVEL, BlockTypes.COAL_ORE
+            ];
 
             const keyIndex = blockKeys.indexOf(e.code);
             if (keyIndex !== -1) {
@@ -595,7 +607,7 @@ class Game {
         this.directionalLight.shadow.camera.updateProjectionMatrix();
         
         const now = performance.now();
-        if (now - this.lastChunkUpdate > 1000) {
+        if (now - this.lastChunkUpdate > 2000) {
             this.updateWorldChunks();
             this.updateChunkMeshes();
             this.lastChunkUpdate = now;

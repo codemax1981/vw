@@ -13,7 +13,11 @@ export const BlockTypes = {
     SAND: 3,
     LOG: 4,
     LEAVES: 5,
-    WATER: 6
+    WATER: 6,
+    STONE: 7,        // NEW
+    GRAVEL: 8,       // NEW
+    COAL_ORE: 9,     // NEW
+    BEDROCK: 10      // NEW
 };
 
 export const BlockColors = {
@@ -22,7 +26,11 @@ export const BlockColors = {
     [BlockTypes.SAND]: 0xF4A460,
     [BlockTypes.LOG]: 0x654321,
     [BlockTypes.LEAVES]: 0x32CD32,
-    [BlockTypes.WATER]: 0x4169E1
+    [BlockTypes.WATER]: 0x4169E1,
+    [BlockTypes.STONE]: 0x808080,      // NEW
+    [BlockTypes.GRAVEL]: 0x999999,     // NEW
+    [BlockTypes.COAL_ORE]: 0x2F2F2F,   // NEW
+    [BlockTypes.BEDROCK]: 0x1A1A1A     // NEW
 };
 
 export function getBlockColor(blockType) {

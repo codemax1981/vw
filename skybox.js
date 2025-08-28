@@ -1,4 +1,4 @@
-// skybox.js
+
 
 export class SkyboxManager {
     constructor(scene, renderer, camera, timeManager) {
@@ -27,6 +27,23 @@ export class SkyboxManager {
         this.updateInterval = 50; // Update every 50ms for smoother transitions
 
         this.init();
+    }
+
+    // Smooth transition function - creates natural easing curves
+    smoothTransition(t, power = 2.0) {
+        if (t <= 0) return 0;
+        if (t >= 1) return 1;
+        return Math.pow(t, power);
+    }
+
+    // Atmospheric scattering curve - mimics how light behaves in the atmosphere
+    atmosphericCurve(sunHeight) {
+        // sunHeight ranges from -1 to 1
+        const normalized = (sunHeight + 1) * 0.5; // Convert to 0-1
+        
+        // Use a sigmoid-like curve for natural atmospheric scattering
+        const t = Math.max(0, Math.min(1, normalized * 1.2 - 0.1));
+        return t * t * (3 - 2 * t); // Smoothstep function
     }
 
     init() {
@@ -59,63 +76,89 @@ export class SkyboxManager {
             uniform float time;
             uniform vec3 sunPosition;
             uniform float daylightRatio;
+            uniform float atmosphericIntensity;
             
-            // Enhanced sky color definitions for better contrast
-            const vec3 dayTopColor = vec3(0.2, 0.5, 1.0);          // Deep blue sky
-            const vec3 dayHorizonColor = vec3(0.6, 0.8, 1.0);      // Light blue horizon
-            const vec3 nightTopColor = vec3(0.005, 0.005, 0.02);   // Very dark blue-black
-            const vec3 nightHorizonColor = vec3(0.01, 0.01, 0.05); // Slightly lighter at horizon
-            const vec3 sunsetColor = vec3(1.0, 0.4, 0.1);          // Deep orange sunset
-            const vec3 sunriseColor = vec3(1.0, 0.7, 0.3);         // Golden sunrise
+            // Enhanced color palette with more transition states
+            const vec3 dayTopColor = vec3(0.3, 0.6, 1.0);
+            const vec3 dayHorizonColor = vec3(0.7, 0.85, 1.0);
+            
+            // Multiple night color stages for smoother transition
+            const vec3 duskTopColor = vec3(0.1, 0.2, 0.5);
+            const vec3 duskHorizonColor = vec3(0.3, 0.3, 0.6);
+            const vec3 nightTopColor = vec3(0.005, 0.01, 0.03);
+            const vec3 nightHorizonColor = vec3(0.02, 0.02, 0.08);
+            
+            // Golden hour colors
+            const vec3 sunsetTopColor = vec3(0.8, 0.4, 0.2);
+            const vec3 sunsetHorizonColor = vec3(1.0, 0.6, 0.2);
+            const vec3 sunriseTopColor = vec3(0.9, 0.6, 0.3);
+            const vec3 sunriseHorizonColor = vec3(1.0, 0.8, 0.4);
+
+            // Smooth interpolation function
+            vec3 smoothMix(vec3 a, vec3 b, float t) {
+                float smoothT = t * t * (3.0 - 2.0 * t);
+                return mix(a, b, smoothT);
+            }
 
             void main() {
                 vec3 direction = normalize(vWorldPosition);
                 float sunDot = dot(direction, vSunDirection);
                 
-                // Calculate vertical gradient (0 = horizon, 1 = zenith)
+                // Enhanced vertical gradient with atmospheric perspective
                 float verticalGradient = max(0.0, direction.y);
                 
-                // Enhanced day sky colors with better gradient
-                vec3 dayColor = mix(dayHorizonColor, dayTopColor, pow(verticalGradient, 0.6));
+                // Multi-stage day/night transition
+                vec3 finalColor;
                 
-                // Much darker night sky colors
-                vec3 nightColor = mix(nightHorizonColor, nightTopColor, pow(verticalGradient, 0.4));
-                
-                // Enhanced sunset/sunrise effect
-                float sunsetInfluence = 0.0;
-                if (vSunDirection.y > -0.3 && vSunDirection.y < 0.3) {
-                    float horizonFactor = 1.0 - abs(direction.y);
-                    float sunProximity = max(0.0, sunDot);
-                    sunsetInfluence = pow(horizonFactor, 1.5) * pow(sunProximity, 0.3) * 
-                                    (1.0 - abs(vSunDirection.y) * 3.0);
+                if (daylightRatio > 0.8) {
+                    // Full daylight
+                    finalColor = smoothMix(dayHorizonColor, dayTopColor, pow(verticalGradient, 0.6));
+                } else if (daylightRatio > 0.4) {
+                    // Golden hour transition
+                    float goldenFactor = (daylightRatio - 0.4) / 0.4;
+                    vec3 dayColor = smoothMix(dayHorizonColor, dayTopColor, pow(verticalGradient, 0.6));
+                    
+                    vec3 goldenTop = mix(sunsetTopColor, sunriseTopColor, step(0.0, vSunDirection.z));
+                    vec3 goldenHorizon = mix(sunsetHorizonColor, sunriseHorizonColor, step(0.0, vSunDirection.z));
+                    vec3 goldenColor = smoothMix(goldenHorizon, goldenTop, pow(verticalGradient, 0.4));
+                    
+                    finalColor = smoothMix(goldenColor, dayColor, pow(goldenFactor, 0.7));
+                } else if (daylightRatio > 0.1) {
+                    // Twilight transition
+                    float twilightFactor = (daylightRatio - 0.1) / 0.3;
+                    
+                    vec3 goldenTop = mix(sunsetTopColor, sunriseTopColor, step(0.0, vSunDirection.z));
+                    vec3 goldenHorizon = mix(sunsetHorizonColor, sunriseHorizonColor, step(0.0, vSunDirection.z));
+                    vec3 goldenColor = smoothMix(goldenHorizon, goldenTop, pow(verticalGradient, 0.4));
+                    
+                    vec3 duskColor = smoothMix(duskHorizonColor, duskTopColor, pow(verticalGradient, 0.5));
+                    
+                    finalColor = smoothMix(duskColor, goldenColor, pow(twilightFactor, 0.5));
+                } else {
+                    // Night to twilight
+                    float nightFactor = daylightRatio / 0.1;
+                    vec3 nightColor = smoothMix(nightHorizonColor, nightTopColor, pow(verticalGradient, 0.3));
+                    vec3 duskColor = smoothMix(duskHorizonColor, duskTopColor, pow(verticalGradient, 0.5));
+                    
+                    finalColor = smoothMix(nightColor, duskColor, pow(nightFactor, 0.3));
                 }
                 
-                // Choose sunset or sunrise color based on time
-                vec3 goldenColor = mix(sunsetColor, sunriseColor, step(0.0, vSunDirection.z));
-                
-                // Smoother day/night transition with proper curve
-                float transitionFactor = pow(daylightRatio, 0.8);
-                vec3 finalColor = mix(nightColor, dayColor, transitionFactor);
-                
-                // Add sunset/sunrise coloring with better blending
-                finalColor = mix(finalColor, goldenColor, sunsetInfluence * 0.6);
-                
-                // Enhanced sun disk
+                // Enhanced sun with smooth visibility
                 float sunDistance = distance(direction, vSunDirection);
-                float sunSize = 0.03;
+                float sunSize = 0.04;
                 float sunGlow = 1.0 - smoothstep(0.0, sunSize, sunDistance);
-                float sunCore = 1.0 - smoothstep(0.0, sunSize * 0.3, sunDistance);
+                float sunCore = 1.0 - smoothstep(0.0, sunSize * 0.2, sunDistance);
                 
-                // Sun color changes based on time of day
-                vec3 sunColor = mix(vec3(1.0, 0.9, 0.8), vec3(1.0, 1.0, 0.95), transitionFactor);
-                if (sunsetInfluence > 0.1) {
-                    sunColor = mix(sunColor, vec3(1.0, 0.6, 0.2), sunsetInfluence);
+                vec3 sunColor = vec3(1.0, 1.0, 0.95);
+                if (daylightRatio < 0.6) {
+                    float sunsetInfluence = 1.0 - (daylightRatio / 0.6);
+                    sunColor = mix(sunColor, vec3(1.0, 0.5, 0.2), sunsetInfluence);
                 }
                 
-                finalColor += sunGlow * sunColor * daylightRatio * 0.8;
-                finalColor += sunCore * sunColor * daylightRatio * 1.2;
+                float sunVisibility = smoothstep(-0.1, 0.05, vSunDirection.y);
+                finalColor += sunGlow * sunColor * daylightRatio * sunVisibility * 0.3; // MODIFIED: Reduced glow intensity
+                finalColor += sunCore * sunColor * 1.5 * daylightRatio * sunVisibility;
                 
-                // Ensure night sky is properly opaque
                 gl_FragColor = vec4(finalColor, 1.0);
             }
         `;
@@ -123,7 +166,8 @@ export class SkyboxManager {
         this.skyUniforms = {
             time: { value: 0 },
             sunPosition: { value: new THREE.Vector3(0, 100, 0) },
-            daylightRatio: { value: 1.0 }
+            daylightRatio: { value: 1.0 },
+            atmosphericIntensity: { value: 1.0 } // Add this line
         };
 
         const skyMaterial = new THREE.ShaderMaterial({
@@ -482,14 +526,14 @@ export class SkyboxManager {
             this.atmosphereRing.position.z = playerPosition.z;
         }
 
-        // Get proper sun information from time manager
+        // Get enhanced lighting information from time manager
         const sunAngle = this.timeManager._currentTime * Math.PI * 2 - Math.PI / 2;
         const sunY = Math.sin(sunAngle);
-        
-        // Better daylight calculation that matches the TimeManager
+
+        // Use atmospheric curve for more natural lighting
         const rawIntensity = Math.max(0, sunY);
-        const smoothedIntensity = Math.pow(rawIntensity, 0.5);
-        const nightIntensity = Math.max(0, 1.0 - smoothedIntensity * 1.2); // Stars appear earlier
+        const atmosphericIntensity = this.atmosphericCurve(sunY);
+        const nightIntensity = 1.0 - atmosphericIntensity;
 
         const sunPosition = new THREE.Vector3(
             0,
@@ -497,30 +541,31 @@ export class SkyboxManager {
             Math.cos(sunAngle) * 200
         );
 
-        // Update sky dome with proper daylight ratio
+        // Update sky dome with enhanced parameters
         if (this.skyUniforms) {
-            this.skyUniforms.time.value += deltaTime * 1000; // Convert to milliseconds
+            this.skyUniforms.time.value += deltaTime * 1000;
             this.skyUniforms.sunPosition.value.copy(sunPosition);
-            this.skyUniforms.daylightRatio.value = smoothedIntensity;
+            this.skyUniforms.daylightRatio.value = atmosphericIntensity;
+            this.skyUniforms.atmosphericIntensity.value = Math.max(0.3, atmosphericIntensity);
         }
 
-        // Update stars - they should be bright at night
+        // Update stars with smooth transition
         if (this.starUniforms) {
             this.starUniforms.time.value += deltaTime * 1000;
             this.starUniforms.nightIntensity.value = nightIntensity;
         }
 
-        // Update clouds with better lighting
+        // Update clouds with enhanced lighting
         this.cloudUniforms.forEach((uniforms, index) => {
             uniforms.time.value += deltaTime;
-            uniforms.lightIntensity.value = Math.max(0.05, smoothedIntensity);
+            uniforms.lightIntensity.value = Math.max(0.05, atmosphericIntensity);
             uniforms.sunDirection.value.copy(sunPosition).normalize();
         });
 
         // Update atmosphere ring
         if (this.atmosphereRing) {
             this.atmosphereRing.material.uniforms.time.value += deltaTime * 1000;
-            this.atmosphereRing.material.uniforms.sunIntensity.value = smoothedIntensity;
+            this.atmosphereRing.material.uniforms.sunIntensity.value = atmosphericIntensity; // Changed from smoothedIntensity
             this.atmosphereRing.material.uniforms.sunDirection.value.copy(sunPosition).normalize();
         }
     }

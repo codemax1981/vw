@@ -1,28 +1,22 @@
 // world-worker.js
 
-// World generation constants (duplicated for worker)
+// World generation constants
 const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 64;
 const WATER_LEVEL = 28;
 
-// --- ADVANCED WORLD GENERATION PARAMETERS ---
+// --- MINECRAFT BETA STYLE PARAMETERS ---
+const BASE_HEIGHT = 32;
+const HEIGHT_VARIATION = 20;
+const TERRAIN_SCALE = 0.02;
+const TERRAIN_SCALE_2 = 0.04;
+const DETAIL_SCALE = 0.08;
+const DETAIL_AMPLITUDE = 3;
 
-// Biome settings
-const BIOME_SCALE = 0.003; // How large biomes are. Smaller number = larger biomes.
-const PLAINS_HEIGHT = 29;
-const HILLS_HEIGHT = 38;
-const MOUNTAIN_HEIGHT = 55;
-
-// Terrain detail settings
-const TERRAIN_DETAIL_SCALE = 0.05; // Controls the small bumps and details on the surface.
-const TERRAIN_DETAIL_AMPLITUDE = 4;
-const MOUNTAIN_RUGGEDNESS_SCALE = 0.02; // Extra noise for mountains to make them jagged.
-const MOUNTAIN_RUGGEDNESS_AMPLITUDE = 10;
-
-// Lake settings
-const LAKE_SCALE = 0.008; // How large lakes are.
-const LAKE_THRESHOLD = 0.6; // 0.0 to 1.0. Higher = fewer, smaller lakes.
-const LAKE_DEPTH = 15; // Maximum depth of lakes.
+// Tree generation parameters
+const TREE_DENSITY = 0.02;
+const TREE_NOISE_SCALE = 0.1;
+const TREE_THRESHOLD = 0.4;
 
 const BlockTypes = {
   AIR: 0,
@@ -31,7 +25,11 @@ const BlockTypes = {
   SAND: 3,
   LOG: 4,
   LEAVES: 5,
-  WATER: 6
+  WATER: 6,
+  STONE: 7,
+  GRAVEL: 8,
+  COAL_ORE: 9,
+  BEDROCK: 10
 };
 
 // --- Perlin Noise Generator (2D only) ---
@@ -85,67 +83,179 @@ class Noise {
 
 let noise;
 
-// --- HELPER FUNCTION ---
-function smoothstep(edge0, edge1, x) {
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-    return t * t * (3 - 2 * t);
-}
-
-// --- TREE GENERATION LOGIC (Unchanged) ---
+// --- HELPER FUNCTIONS ---
 function setBlock(blocks, x, y, z, blockType) {
     if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+        // Don't overwrite existing solid blocks with leaves
         if (blockType === BlockTypes.LEAVES && blocks[idx] !== BlockTypes.AIR) {
             return;
         }
         blocks[idx] = blockType;
     }
 }
+
+function getBlock(blocks, x, y, z) {
+    if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
+        const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+        return blocks[idx];
+    }
+    return BlockTypes.AIR;
+}
+
+// --- MINECRAFT BETA TERRAIN GENERATION ---
+function generateMinecraftBetaTerrain(blocks, chunkX, chunkZ) {
+    const worldX = chunkX * CHUNK_SIZE;
+    const worldZ = chunkZ * CHUNK_SIZE;
+    
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+            const wx = worldX + x;
+            const wz = worldZ + z;
+            
+            // Primary height map - large scale terrain features
+            const heightNoise1 = noise.noise2D(wx * TERRAIN_SCALE, wz * TERRAIN_SCALE);
+            
+            // Secondary height map - medium scale variation
+            const heightNoise2 = noise.noise2D(wx * TERRAIN_SCALE_2, wz * TERRAIN_SCALE_2) * 0.5;
+            
+            // Combine height maps
+            const combinedHeight = (heightNoise1 + heightNoise2) * HEIGHT_VARIATION;
+            
+            // Add fine details
+            const detail = noise.noise2D(wx * DETAIL_SCALE, wz * DETAIL_SCALE) * DETAIL_AMPLITUDE;
+            
+            // Calculate final surface height
+            let surfaceHeight = Math.floor(BASE_HEIGHT + combinedHeight + detail);
+            
+            // Clamp height to reasonable bounds
+            surfaceHeight = Math.max(5, Math.min(CHUNK_HEIGHT - 5, surfaceHeight));
+            
+            // Generate the column of blocks
+            generateColumn(blocks, x, z, surfaceHeight, wx, wz);
+        }
+    }
+}
+
+function generateColumn(blocks, x, z, surfaceHeight, worldX, worldZ) {
+    for (let y = 0; y < CHUNK_HEIGHT; y++) {
+        const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+        
+        if (y === 0) {
+            // Bedrock bottom layer
+            blocks[idx] = BlockTypes.BEDROCK;
+        } else if (y < surfaceHeight - 4) {
+            // Deep stone layer with occasional coal
+            blocks[idx] = BlockTypes.STONE;
+            
+            // Surface coal deposits - more likely higher up
+            if (y > surfaceHeight - 12 && y < surfaceHeight - 2) {
+                const coalNoise = noise.noise2D(worldX * 0.1 + y * 0.2, worldZ * 0.1 + y * 0.2);
+                if (coalNoise > 0.6) {
+                    blocks[idx] = BlockTypes.COAL_ORE;
+                }
+            }
+        } else if (y < surfaceHeight - 1) {
+            // Dirt layer (typically 2-3 blocks thick)
+            blocks[idx] = BlockTypes.DIRT;
+        } else if (y === surfaceHeight) {
+            // Surface block determination - only place solid blocks above water level
+            if (surfaceHeight > WATER_LEVEL) {
+                if (surfaceHeight <= WATER_LEVEL + 3) {
+                    // Beach area - primarily sand with some gravel
+                    const beachNoise = noise.noise2D(worldX * 0.15, worldZ * 0.15);
+                    blocks[idx] = beachNoise > 0.0 ? BlockTypes.SAND : BlockTypes.GRAVEL;
+                } else {
+                    // Normal grass surface
+                    blocks[idx] = BlockTypes.GRASS;
+                }
+            } else {
+                // Underground surface - place appropriate block
+                if (surfaceHeight < WATER_LEVEL - 2) {
+                    blocks[idx] = BlockTypes.SAND; // Deep underwater
+                } else {
+                    const beachNoise = noise.noise2D(worldX * 0.2, worldZ * 0.2);
+                    blocks[idx] = beachNoise > 0.2 ? BlockTypes.SAND : BlockTypes.GRAVEL;
+                }
+            }
+        } else if (y <= WATER_LEVEL) {
+            // Fill with water up to water level (only if no solid block placed)
+            blocks[idx] = BlockTypes.WATER;
+        } else {
+            // Above surface and water level - air
+            blocks[idx] = BlockTypes.AIR;
+        }
+    }
+}
+
+// --- TREE GENERATION ---
 function findGroundLevel(blocks, x, z) {
     for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
-        const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
-        if (blocks[idx] === BlockTypes.GRASS) {
+        const blockType = getBlock(blocks, x, y, z);
+        if (blockType === BlockTypes.GRASS || blockType === BlockTypes.DIRT) {
             return y;
         }
     }
     return -1;
 }
+
 function generateOakTree(blocks, x, z, groundY) {
-    const treeHeight = 5 + Math.floor(Math.random() * 3);
+    const treeHeight = 4 + Math.floor(Math.random() * 3); // 4-6 blocks tall
+    
+    // Generate trunk
     for (let y = 1; y <= treeHeight; y++) {
         setBlock(blocks, x, groundY + y, z, BlockTypes.LOG);
     }
+    
+    // Generate canopy
     const canopyCenterY = groundY + treeHeight;
-    const canopyRadius = 2.5 + Math.random() * 0.5;
-    for (let ly = -3; ly <= 3; ly++) {
-        for (let lx = -3; lx <= 3; lx++) {
-            for (let lz = -3; lz <= 3; lz++) {
+    const canopyRadius = 2 + Math.random() * 0.5;
+    
+    for (let ly = -2; ly <= 2; ly++) {
+        for (let lx = -2; lx <= 2; lx++) {
+            for (let lz = -2; lz <= 2; lz++) {
                 const dist = Math.sqrt(lx * lx + ly * ly + lz * lz);
-                if (dist < canopyRadius && Math.random() > 0.1) {
-                    if (lx === 0 && lz === 0 && ly >= 0) continue;
+                
+                // Skip the trunk center for upper layers
+                if (lx === 0 && lz === 0 && ly >= 0) continue;
+                
+                // Generate leaves with some randomness for natural look
+                if (dist <= canopyRadius && Math.random() > 0.15) {
                     setBlock(blocks, x + lx, canopyCenterY + ly, z + lz, BlockTypes.LEAVES);
                 }
             }
         }
     }
 }
+
 function generateTrees(blocks, chunkX, chunkZ) {
     const worldX = chunkX * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE;
-    for (let i = 0; i < 8; i++) {
-        const x = Math.floor(Math.random() * 14) + 1;
-        const z = Math.floor(Math.random() * 14) + 1;
+    
+    // Try to place several trees per chunk
+    const treeAttempts = 8;
+    
+    for (let i = 0; i < treeAttempts; i++) {
+        // Random position within chunk (avoid edges for full trees)
+        const x = 2 + Math.floor(Math.random() * 12);
+        const z = 2 + Math.floor(Math.random() * 12);
+        
         const wx = worldX + x;
         const wz = worldZ + z;
-        const treeNoise = noise.noise2D(wx * 0.1, wz * 0.1);
-        if (treeNoise > 0.4) {
+        
+        // Use noise to determine if tree should spawn here
+        const treeNoise = noise.noise2D(wx * TREE_NOISE_SCALE, wz * TREE_NOISE_SCALE);
+        
+        if (treeNoise > TREE_THRESHOLD) {
             const groundY = findGroundLevel(blocks, x, z);
-            if (groundY === -1) continue;
-            generateOakTree(blocks, x, z, groundY);
+            
+            // Only place trees on grass blocks above water level
+            if (groundY > WATER_LEVEL && getBlock(blocks, x, groundY, z) === BlockTypes.GRASS) {
+                generateOakTree(blocks, x, z, groundY);
+            }
         }
     }
 }
-
 
 // --- WORKER MESSAGE HANDLER ---
 onmessage = function(e) {
@@ -156,73 +266,23 @@ onmessage = function(e) {
     postMessage({ cmd: 'ready' });
   } else if (cmd === 'generateChunk') {
     const { chunkX, chunkZ } = data;
+    
+    // Initialize chunk with all air blocks
     const blocks = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+    blocks.fill(BlockTypes.AIR);
     
-    const worldX = chunkX * CHUNK_SIZE;
-    const worldZ = chunkZ * CHUNK_SIZE;
+    // Generate basic terrain
+    generateMinecraftBetaTerrain(blocks, chunkX, chunkZ);
     
-    // --- TERRAIN GENERATION PASS ---
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-      for (let z = 0; z < CHUNK_SIZE; z++) {
-        const wx = worldX + x;
-        const wz = worldZ + z;
-
-        // Step 1: Determine biome characteristics
-        const biomeNoise = (noise.noise2D(wx * BIOME_SCALE, wz * BIOME_SCALE) + 1) / 2; // 0-1
-        
-        // Blend between plains and hills
-        const plainsToHills = smoothstep(0.3, 0.5, biomeNoise);
-        let baseHeight = noise.lerp(PLAINS_HEIGHT, HILLS_HEIGHT, plainsToHills);
-        
-        // Blend between hills and mountains
-        const hillsToMountains = smoothstep(0.6, 0.8, biomeNoise);
-        baseHeight = noise.lerp(baseHeight, MOUNTAIN_HEIGHT, hillsToMountains);
-
-        // Step 2: Add terrain details and ruggedness
-        let detailNoise = noise.noise2D(wx * TERRAIN_DETAIL_SCALE, wz * TERRAIN_DETAIL_SCALE) * TERRAIN_DETAIL_AMPLITUDE;
-        let ruggedness = noise.noise2D(wx * MOUNTAIN_RUGGEDNESS_SCALE, wz * MOUNTAIN_RUGGEDNESS_SCALE) * MOUNTAIN_RUGGEDNESS_AMPLITUDE * hillsToMountains;
-        
-        let surfaceHeight = baseHeight + detailNoise + ruggedness;
-
-        // Step 3: Carve lakes
-        const lakeNoise = (noise.noise2D(wx * LAKE_SCALE, wz * LAKE_SCALE) + 1) / 2; // 0-1
-        if (lakeNoise > LAKE_THRESHOLD) {
-            const lakeInfluence = (lakeNoise - LAKE_THRESHOLD) / (1.0 - LAKE_THRESHOLD);
-            surfaceHeight -= lakeInfluence * LAKE_DEPTH;
-        }
-
-        surfaceHeight = Math.floor(surfaceHeight);
-
-        // Step 4: Place initial blocks (dirt, grass, sand, water)
-        for (let y = 0; y < CHUNK_HEIGHT; y++) {
-          const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
-          
-          if (y < surfaceHeight - 3) {
-            blocks[idx] = BlockTypes.DIRT;
-          } else if (y < surfaceHeight) {
-            blocks[idx] = BlockTypes.DIRT;
-          } else if (y === surfaceHeight) {
-            if (y < WATER_LEVEL) {
-              blocks[idx] = BlockTypes.SAND; // Lakebeds
-            } else if (y <= WATER_LEVEL + 2) {
-              blocks[idx] = BlockTypes.SAND; // Beaches
-            } else if (y > MOUNTAIN_HEIGHT - 5) {
-              blocks[idx] = BlockTypes.DIRT; // Rocky mountain peaks
-            } else {
-              blocks[idx] = BlockTypes.GRASS;
-            }
-          } else if (y <= WATER_LEVEL) {
-            blocks[idx] = BlockTypes.WATER;
-          } else {
-            blocks[idx] = BlockTypes.AIR;
-          }
-        }
-      }
-    }
-    
-    // --- FINAL PASS: TREES ---
+    // Add trees
     generateTrees(blocks, chunkX, chunkZ);
     
-    postMessage({ cmd: 'chunk', chunkX, chunkZ, blocks }, [blocks.buffer]);
+    // Send the completed chunk back to main thread
+    postMessage({ 
+      cmd: 'chunk', 
+      chunkX, 
+      chunkZ, 
+      blocks 
+    }, [blocks.buffer]);
   }
 };

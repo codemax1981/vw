@@ -1,3 +1,5 @@
+
+
 // time.js - Enhanced with skybox integration
 
 // --- CONFIGURATION ---
@@ -20,7 +22,7 @@ export class TimeManager {
         this.renderer = renderer;
         this.sunLight = directionalLight;
         this.ambientLight = ambientLight;
-        this._currentTime = 0.25; // Start at sunrise (0.25)
+        this._currentTime = 0.30; // Start at sunrise (0.25)
         this.dayDuration = DAY_DURATION_SECONDS;
         this.sun = null;
         this.moon = null;
@@ -39,16 +41,16 @@ export class TimeManager {
         });
         this.sun = new THREE.Mesh(sunGeometry, sunMaterial);
         
-        // Add sun corona
-        const coronaGeometry = new THREE.SphereGeometry(25, 32, 32);
-        const coronaMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFFDD44,
-            transparent: true,
-            opacity: 0.2,
-            fog: false
-        });
-        const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
-        this.sun.add(corona);
+        // MODIFIED: Removed sun corona
+        // const coronaGeometry = new THREE.SphereGeometry(25, 32, 32);
+        // const coronaMaterial = new THREE.MeshBasicMaterial({
+        //     color: 0xFFDD44,
+        //     transparent: true,
+        //     opacity: 0.2,
+        //     fog: false
+        // });
+        // const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+        // this.sun.add(corona);
         
         this.scene.add(this.sun);
 
@@ -118,10 +120,14 @@ export class TimeManager {
         // 3. Update lighting intensity based on sun's height
         // sunY is a value from -1 (midnight) to 1 (noon)
         const sunY = Math.sin(sunAngle);
-        const daylightIntensity = Math.max(0, sunY); // 0 at horizon, 1 at noon
-
-        // Smooth the transition for a nicer sunrise/sunset
-        const smoothedIntensity = Math.pow(daylightIntensity, 0.5);
+        // Use atmospheric curve for more natural lighting transitions
+        const daylightIntensity = Math.max(0, sunY);
+        const atmosphericCurve = (t) => {
+            const normalized = (t + sunY + 1) * 0.5;
+            const smooth = Math.max(0, Math.min(1, normalized * 1.2 - 0.1));
+            return smooth * smooth * (3 - 2 * smooth);
+        };
+        const smoothedIntensity = atmosphericCurve(daylightIntensity);
 
         this.sunLight.intensity = minSunlight + (maxSunlight - minSunlight) * smoothedIntensity;
         this.ambientLight.intensity = minAmbient + (maxAmbient - minAmbient) * smoothedIntensity;
