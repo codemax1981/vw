@@ -1,5 +1,3 @@
-
-
 export class SkyboxManager {
     constructor(scene, renderer, camera, timeManager) {
         this.scene = scene;
@@ -9,7 +7,7 @@ export class SkyboxManager {
 
         // Skybox configuration
         this.skyboxRadius = 500;
-        this.atmosphereHeight = 80;
+        this.atmosphereHeight = 90; // MODIFIED: Raised from 80 to be above the new base ground level
 
         // Create skybox components
         this.skyDome = null;
@@ -156,7 +154,7 @@ export class SkyboxManager {
                 }
                 
                 float sunVisibility = smoothstep(-0.1, 0.05, vSunDirection.y);
-                finalColor += sunGlow * sunColor * daylightRatio * sunVisibility * 0.3; // MODIFIED: Reduced glow intensity
+                finalColor += sunGlow * sunColor * daylightRatio * sunVisibility * 0.3;
                 finalColor += sunCore * sunColor * 1.5 * daylightRatio * sunVisibility;
                 
                 gl_FragColor = vec4(finalColor, 1.0);
@@ -167,7 +165,7 @@ export class SkyboxManager {
             time: { value: 0 },
             sunPosition: { value: new THREE.Vector3(0, 100, 0) },
             daylightRatio: { value: 1.0 },
-            atmosphericIntensity: { value: 1.0 } // Add this line
+            atmosphericIntensity: { value: 1.0 }
         };
 
         const skyMaterial = new THREE.ShaderMaterial({
@@ -186,17 +184,15 @@ export class SkyboxManager {
     }
 
     createStarField() {
-        const starCount = 12000; // More stars for better night sky
+        const starCount = 12000;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(starCount * 3);
         const colors = new Float32Array(starCount * 3);
         const sizes = new Float32Array(starCount);
 
-        // Generate stars with realistic distribution
         for (let i = 0; i < starCount; i++) {
             const i3 = i * 3;
             
-            // Use spherical coordinates for even distribution
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(1 - 2 * Math.random());
             const radius = this.skyboxRadius * 0.98;
@@ -205,28 +201,23 @@ export class SkyboxManager {
             positions[i3 + 1] = radius * Math.cos(phi);
             positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
 
-            // Enhanced star colors based on stellar classification
             const temp = Math.random();
             if (temp < 0.1) {
-                // Red giants - rare but bright
                 colors[i3] = 1.0;
                 colors[i3 + 1] = 0.3 + Math.random() * 0.3;
                 colors[i3 + 2] = 0.1 + Math.random() * 0.2;
                 sizes[i] = 3 + Math.random() * 4;
             } else if (temp < 0.6) {
-                // Sun-like stars - most common
                 colors[i3] = 1.0;
                 colors[i3 + 1] = 0.9 + Math.random() * 0.1;
                 colors[i3 + 2] = 0.8 + Math.random() * 0.2;
                 sizes[i] = 1 + Math.random() * 2;
             } else if (temp < 0.9) {
-                // Blue-white stars
                 colors[i3] = 0.8 + Math.random() * 0.2;
                 colors[i3 + 1] = 0.9 + Math.random() * 0.1;
                 colors[i3 + 2] = 1.0;
                 sizes[i] = 1.5 + Math.random() * 2.5;
             } else {
-                // Bright stars - very rare
                 colors[i3] = 1.0;
                 colors[i3 + 1] = 1.0;
                 colors[i3 + 2] = 1.0;
@@ -250,10 +241,8 @@ export class SkyboxManager {
                 vColor = color;
                 vSize = size;
                 
-                // Stars become visible as night approaches with better curve
                 vAlpha = pow(nightIntensity, 0.5);
                 
-                // Enhanced twinkling effect
                 float twinkleSpeed = 0.003 + (size * 0.0005);
                 float twinkle = sin(time * twinkleSpeed + position.x * 0.01 + position.z * 0.01) * 0.3 + 0.7;
                 vAlpha *= twinkle;
@@ -273,7 +262,6 @@ export class SkyboxManager {
                 float r = distance(gl_PointCoord, vec2(0.5, 0.5));
                 if (r > 0.5) discard;
                 
-                // Better star shape with core and glow
                 float core = 1.0 - smoothstep(0.0, 0.1, r);
                 float glow = 1.0 - smoothstep(0.1, 0.5, r);
                 
@@ -301,16 +289,17 @@ export class SkyboxManager {
         });
 
         this.starField = new THREE.Points(geometry, starMaterial);
-        this.starField.renderOrder = -999; // In front of sky dome but behind clouds
+        this.starField.renderOrder = -999;
         this.scene.add(this.starField);
     }
 
     createCloudLayers() {
         // Create multiple cloud layers at different heights
+        // MODIFIED: Raised cloud heights to float above the new, taller mountains
         const cloudLayers = [
-            { height: 120, density: 0.3, speed: 0.15, scale: 1.2 },
-            { height: 90, density: 0.4, speed: 0.12, scale: 0.8 },
-            { height: 70, density: 0.25, speed: 0.08, scale: 1.5 }
+            { height: 220, density: 0.3, speed: 0.15, scale: 1.2 }, // Main layer
+            { height: 200, density: 0.4, speed: 0.12, scale: 0.8 }, // Lower, faster layer for parallax
+            { height: 240, density: 0.25, speed: 0.08, scale: 1.5 }  // High, slow layer
         ];
 
         cloudLayers.forEach((layerConfig, index) => {
@@ -339,7 +328,6 @@ export class SkyboxManager {
                 uniform float lightIntensity;
                 uniform vec3 sunDirection;
 
-                // Improved noise functions for better cloud shapes
                 float hash(vec2 p) {
                     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
                 }
@@ -376,33 +364,25 @@ export class SkyboxManager {
                     vec2 st = vUv * scale;
                     st += vec2(time * speed * 0.02, time * speed * 0.01);
                     
-                    // Enhanced cloud pattern
                     float cloudPattern = fbm(st * 2.0);
                     cloudPattern += fbm(st * 4.0) * 0.5;
                     cloudPattern += fbm(st * 8.0) * 0.25;
                     
                     float alpha = smoothstep(0.45, 0.75, cloudPattern) * density;
                     
-                    // Enhanced lighting with better day/night distinction
                     vec3 normal = vec3(0.0, 1.0, 0.0);
                     float lightDot = max(0.1, dot(normal, sunDirection));
                     
-                    // Day clouds - bright white/gray
                     vec3 dayCloudColor = mix(vec3(0.6, 0.6, 0.7), vec3(1.0, 1.0, 1.0), lightDot);
-                    
-                    // Night clouds - very dark
                     vec3 nightCloudColor = vec3(0.1, 0.1, 0.15) * lightDot;
-                    
                     vec3 cloudColor = mix(nightCloudColor, dayCloudColor, lightIntensity);
                     
-                    // Add sunset/sunrise coloring
                     if (lightIntensity < 0.6 && lightIntensity > 0.1) {
                         vec3 sunsetTint = vec3(1.0, 0.6, 0.3);
                         float sunsetFactor = (0.6 - lightIntensity) * 2.0;
                         cloudColor = mix(cloudColor, sunsetTint, sunsetFactor * 0.4);
                     }
                     
-                    // Reduce cloud visibility at night
                     alpha *= (0.3 + lightIntensity * 0.7);
                     
                     gl_FragColor = vec4(cloudColor, alpha);
@@ -441,7 +421,6 @@ export class SkyboxManager {
     }
 
     createAtmosphereRing() {
-        // Create atmospheric glow around the horizon
         const atmosphereGeometry = new THREE.RingGeometry(this.skyboxRadius * 0.85, this.skyboxRadius * 1.15, 64);
 
         const atmosphereVertexShader = `
@@ -507,7 +486,6 @@ export class SkyboxManager {
         if (now - this.lastUpdate < this.updateInterval) return;
         this.lastUpdate = now;
 
-        // Update skybox position to follow player
         if (this.skyDome) {
             this.skyDome.position.copy(playerPosition);
         }
@@ -526,12 +504,9 @@ export class SkyboxManager {
             this.atmosphereRing.position.z = playerPosition.z;
         }
 
-        // Get enhanced lighting information from time manager
         const sunAngle = this.timeManager._currentTime * Math.PI * 2 - Math.PI / 2;
         const sunY = Math.sin(sunAngle);
 
-        // Use atmospheric curve for more natural lighting
-        const rawIntensity = Math.max(0, sunY);
         const atmosphericIntensity = this.atmosphericCurve(sunY);
         const nightIntensity = 1.0 - atmosphericIntensity;
 
@@ -541,7 +516,6 @@ export class SkyboxManager {
             Math.cos(sunAngle) * 200
         );
 
-        // Update sky dome with enhanced parameters
         if (this.skyUniforms) {
             this.skyUniforms.time.value += deltaTime * 1000;
             this.skyUniforms.sunPosition.value.copy(sunPosition);
@@ -549,41 +523,35 @@ export class SkyboxManager {
             this.skyUniforms.atmosphericIntensity.value = Math.max(0.3, atmosphericIntensity);
         }
 
-        // Update stars with smooth transition
         if (this.starUniforms) {
             this.starUniforms.time.value += deltaTime * 1000;
             this.starUniforms.nightIntensity.value = nightIntensity;
         }
 
-        // Update clouds with enhanced lighting
         this.cloudUniforms.forEach((uniforms, index) => {
             uniforms.time.value += deltaTime;
             uniforms.lightIntensity.value = Math.max(0.05, atmosphericIntensity);
             uniforms.sunDirection.value.copy(sunPosition).normalize();
         });
 
-        // Update atmosphere ring
         if (this.atmosphereRing) {
             this.atmosphereRing.material.uniforms.time.value += deltaTime * 1000;
-            this.atmosphereRing.material.uniforms.sunIntensity.value = atmosphericIntensity; // Changed from smoothedIntensity
+            this.atmosphereRing.material.uniforms.sunIntensity.value = atmosphericIntensity;
             this.atmosphereRing.material.uniforms.sunDirection.value.copy(sunPosition).normalize();
         }
     }
 
-    // Method to adjust cloud density for weather effects
     setCloudDensity(density) {
         this.cloudUniforms.forEach(uniforms => {
             uniforms.density.value = density;
         });
     }
 
-    // Method to adjust atmospheric conditions
     setAtmosphericConditions(rayleigh, turbidity, mieCoefficient) {
         console.log('Atmospheric conditions adjusted');
     }
 
     cleanup() {
-        // Dispose of geometries and materials
         if (this.skyDome) {
             this.skyDome.geometry.dispose();
             this.skyDome.material.dispose();

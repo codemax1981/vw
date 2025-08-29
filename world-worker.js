@@ -2,21 +2,41 @@
 
 // World generation constants
 const CHUNK_SIZE = 16;
-const CHUNK_HEIGHT = 64;
-const WATER_LEVEL = 28;
+const CHUNK_HEIGHT = 256; // MODIFIED: Increased build height
+const WATER_LEVEL = 62;   // MODIFIED: Raised sea level
 
 // --- MINECRAFT BETA STYLE PARAMETERS ---
-const BASE_HEIGHT = 32;
-const HEIGHT_VARIATION = 20;
+const BASE_HEIGHT = 70;         // MODIFIED: Raised base ground level
+const HEIGHT_VARIATION = 30;    // MODIFIED: More dramatic hills
 const TERRAIN_SCALE = 0.02;
 const TERRAIN_SCALE_2 = 0.04;
 const DETAIL_SCALE = 0.08;
-const DETAIL_AMPLITUDE = 3;
+const DETAIL_AMPLITUDE = 5;     // MODIFIED: Slightly more surface detail
+
+// --- MOUNTAIN PARAMETERS ---
+const MOUNTAIN_SCALE = 0.003; 
+const MOUNTAIN_THRESHOLD = 0.5;
+const MOUNTAIN_PEAK_SCALE = 0.015; 
+const MOUNTAIN_MAX_HEIGHT = 120; // MODIFIED: Much taller mountains
+const SNOW_LINE = 120;           // MODIFIED: Raised snow level for mountain peaks
 
 // Tree generation parameters
 const TREE_DENSITY = 0.02;
 const TREE_NOISE_SCALE = 0.1;
 const TREE_THRESHOLD = 0.4;
+
+const BIOME_SCALE = 0.008;
+const TEMPERATURE_SCALE = 0.005;
+const MOISTURE_SCALE = 0.007;
+
+const BiomeTypes = {
+    PLAINS: 0,
+    FOREST: 1,
+    DESERT: 2,
+    TUNDRA: 3,
+    TAIGA: 4,
+    SWAMP: 5
+};
 
 const BlockTypes = {
   AIR: 0,
@@ -29,14 +49,32 @@ const BlockTypes = {
   STONE: 7,
   GRAVEL: 8,
   COAL_ORE: 9,
-  BEDROCK: 10
+  BEDROCK: 10,
+  SNOW: 11,
+  ICE: 12,
+  CACTUS: 13,
+  DEAD_BUSH: 14,
+  RED_SAND: 15,
+  CLAY: 16,
+  PODZOL: 17,
+  SPRUCE_LOG: 18,
+  SPRUCE_LEAVES: 19
 };
 
 const BlockColors = {
     [BlockTypes.DIRT]: 0x8B4513, [BlockTypes.GRASS]: 0x228B22, [BlockTypes.SAND]: 0xF4A460,
     [BlockTypes.LOG]: 0x654321, [BlockTypes.LEAVES]: 0x32CD32, [BlockTypes.WATER]: 0x4169E1,
     [BlockTypes.STONE]: 0x808080, [BlockTypes.GRAVEL]: 0x999999, [BlockTypes.COAL_ORE]: 0x2F2F2F,
-    [BlockTypes.BEDROCK]: 0x1A1A1A
+    [BlockTypes.BEDROCK]: 0x1A1A1A,
+    [BlockTypes.SNOW]: 0xFFFFFF,
+    [BlockTypes.ICE]: 0xB0E0E6,
+    [BlockTypes.CACTUS]: 0x228B22,
+    [BlockTypes.DEAD_BUSH]: 0x8B4513,
+    [BlockTypes.RED_SAND]: 0xCD853F,
+    [BlockTypes.CLAY]: 0xA0522D,
+    [BlockTypes.PODZOL]: 0x654321,
+    [BlockTypes.SPRUCE_LOG]: 0x4A4A4A,
+    [BlockTypes.SPRUCE_LEAVES]: 0x2F4F2F
 };
 
 // --- Perlin Noise Generator (2D only) ---
@@ -90,15 +128,65 @@ class Noise {
 
 let noise;
 
+function getBiome(worldX, worldZ) {
+    const temp = noise.noise2D(worldX * TEMPERATURE_SCALE, worldZ * TEMPERATURE_SCALE);
+    const moisture = noise.noise2D(worldX * MOISTURE_SCALE + 1000, worldZ * MOISTURE_SCALE + 1000);
+    
+    if (temp < -0.3) return BiomeTypes.TUNDRA;
+    if (temp < -0.1 && moisture > 0) return BiomeTypes.TAIGA;
+    if (temp > 0.4) return BiomeTypes.DESERT;
+    if (moisture < -0.3) return BiomeTypes.PLAINS;
+    if (moisture > 0.3) return BiomeTypes.SWAMP;
+    return BiomeTypes.FOREST;
+}
+
 // --- MESHER LOGIC ---
+// FIXED: Corrected face definitions - removed duplicate face
 const FACES = [
-    { dir: [0, 0, 1], corners: [ { pos: [0, 0, 1], uv: [0, 0] }, { pos: [1, 0, 1], uv: [1, 0] }, { pos: [1, 1, 1], uv: [1, 1] }, { pos: [0, 1, 1], uv: [0, 1] } ] },
-    { dir: [0, 0, -1], corners: [ { pos: [1, 0, 0], uv: [0, 0] }, { pos: [0, 0, 0], uv: [1, 0] }, { pos: [0, 1, 0], uv: [1, 1] }, { pos: [1, 1, 0], uv: [0, 1] } ] },
-    { dir: [0, 1, 0], corners: [ { pos: [0, 1, 0], uv: [0, 1] }, { pos: [0, 1, 1], uv: [0, 0] }, { pos: [1, 1, 1], uv: [1, 0] }, { pos: [1, 1, 0], uv: [1, 1] } ] },
-    { dir: [-1, 0, 0], corners: [ { pos: [0, 0, 1], uv: [0, 1] }, { pos: [0, 0, 0], uv: [0, 0] }, { pos: [1, 0, 0], uv: [1, 0] }, { pos: [1, 0, 1], uv: [1, 1] } ] },
-    { dir: [1, 0, 0], corners: [ { pos: [1, 0, 1], uv: [0, 0] }, { pos: [1, 0, 0], uv: [1, 0] }, { pos: [1, 1, 0], uv: [1, 1] }, { pos: [1, 1, 1], uv: [0, 1] } ] },
-    { dir: [-1, 0, 0], corners: [ { pos: [0, 0, 0], uv: [0, 0] }, { pos: [0, 0, 1], uv: [1, 0] }, { pos: [0, 1, 1], uv: [1, 1] }, { pos: [0, 1, 0], uv: [0, 1] } ] }
+    // Front face (positive Z)
+    { dir: [0, 0, 1], corners: [ 
+        { pos: [0, 0, 1], uv: [0, 0] }, 
+        { pos: [1, 0, 1], uv: [1, 0] }, 
+        { pos: [1, 1, 1], uv: [1, 1] }, 
+        { pos: [0, 1, 1], uv: [0, 1] } 
+    ] },
+    // Back face (negative Z)
+    { dir: [0, 0, -1], corners: [ 
+        { pos: [1, 0, 0], uv: [0, 0] }, 
+        { pos: [0, 0, 0], uv: [1, 0] }, 
+        { pos: [0, 1, 0], uv: [1, 1] }, 
+        { pos: [1, 1, 0], uv: [0, 1] } 
+    ] },
+    // Top face (positive Y)
+    { dir: [0, 1, 0], corners: [ 
+        { pos: [0, 1, 0], uv: [0, 1] }, 
+        { pos: [0, 1, 1], uv: [0, 0] }, 
+        { pos: [1, 1, 1], uv: [1, 0] }, 
+        { pos: [1, 1, 0], uv: [1, 1] } 
+    ] },
+    // Bottom face (negative Y) - FIXED: Was previously overwritten by duplicate
+    { dir: [0, -1, 0], corners: [ 
+        { pos: [0, 0, 0], uv: [0, 0] }, 
+        { pos: [1, 0, 0], uv: [1, 0] }, 
+        { pos: [1, 0, 1], uv: [1, 1] }, 
+        { pos: [0, 0, 1], uv: [0, 1] } 
+    ] },
+    // Right face (positive X)
+    { dir: [1, 0, 0], corners: [ 
+        { pos: [1, 0, 1], uv: [0, 0] }, 
+        { pos: [1, 0, 0], uv: [1, 0] }, 
+        { pos: [1, 1, 0], uv: [1, 1] }, 
+        { pos: [1, 1, 1], uv: [0, 1] } 
+    ] },
+    // Left face (negative X)
+    { dir: [-1, 0, 0], corners: [ 
+        { pos: [0, 0, 0], uv: [0, 0] }, 
+        { pos: [0, 0, 1], uv: [1, 0] }, 
+        { pos: [0, 1, 1], uv: [1, 1] }, 
+        { pos: [0, 1, 0], uv: [0, 1] } 
+    ] }
 ];
+
 const AO_SHADING = [0.5, 0.7, 0.85, 1.0];
 const WATER_SURFACE_Y_OFFSET = -0.15;
 
@@ -229,13 +317,9 @@ function generateGeometryData(chunkData, neighborData, isTransparentPass) {
 function setBlock(blocks, x, y, z, blockType) {
     if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
-        if (blockType === BlockTypes.LEAVES && blocks[idx] !== BlockTypes.AIR) {
-            return;
-        }
         blocks[idx] = blockType;
     }
 }
-
 function getBlock(blocks, x, y, z) {
     if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT && z >= 0 && z < CHUNK_SIZE) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
@@ -254,63 +338,88 @@ function generateMinecraftBetaTerrain(blocks, chunkX, chunkZ) {
             const wx = worldX + x;
             const wz = worldZ + z;
             
+            // --- Base Terrain ---
             const heightNoise1 = noise.noise2D(wx * TERRAIN_SCALE, wz * TERRAIN_SCALE);
             const heightNoise2 = noise.noise2D(wx * TERRAIN_SCALE_2, wz * TERRAIN_SCALE_2) * 0.5;
             const combinedHeight = (heightNoise1 + heightNoise2) * HEIGHT_VARIATION;
             const detail = noise.noise2D(wx * DETAIL_SCALE, wz * DETAIL_SCALE) * DETAIL_AMPLITUDE;
-            let surfaceHeight = Math.floor(BASE_HEIGHT + combinedHeight + detail);
-            surfaceHeight = Math.max(5, Math.min(CHUNK_HEIGHT - 5, surfaceHeight));
+            let surfaceHeight = BASE_HEIGHT + combinedHeight + detail;
             
-            generateColumn(blocks, x, z, surfaceHeight, wx, wz);
+            // --- Mountain Generation ---
+            let mountainInfluence = 0;
+            const mountainNoise = noise.noise2D(wx * MOUNTAIN_SCALE, wz * MOUNTAIN_SCALE);
+            if (mountainNoise > MOUNTAIN_THRESHOLD) {
+                const rawInfluence = (mountainNoise - MOUNTAIN_THRESHOLD) / (1.0 - MOUNTAIN_THRESHOLD);
+                mountainInfluence = rawInfluence * rawInfluence * (3.0 - 2.0 * rawInfluence);
+
+                const mountainShape = (noise.noise2D(wx * MOUNTAIN_PEAK_SCALE, wz * MOUNTAIN_PEAK_SCALE) + 1) / 2;
+                const additionalHeight = mountainInfluence * MOUNTAIN_MAX_HEIGHT * mountainShape;
+                surfaceHeight += additionalHeight;
+            }
+
+            surfaceHeight = Math.floor(Math.max(5, Math.min(CHUNK_HEIGHT - 2, surfaceHeight)));
+            
+            generateColumn(blocks, x, z, surfaceHeight, wx, wz, mountainInfluence);
         }
     }
 }
 
-function generateColumn(blocks, x, z, surfaceHeight, worldX, worldZ) {
+function generateColumn(blocks, x, z, surfaceHeight, worldX, worldZ, mountainInfluence = 0) {
+    const biome = getBiome(worldX, worldZ);
+    
     for (let y = 0; y < CHUNK_HEIGHT; y++) {
         const idx = y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
         
         if (y === 0) {
             blocks[idx] = BlockTypes.BEDROCK;
-        } else if (y < surfaceHeight - 4) {
+            continue;
+        }
+
+        if (y < surfaceHeight - 4) {
             blocks[idx] = BlockTypes.STONE;
-            if (y > surfaceHeight - 12 && y < surfaceHeight - 2) {
+            if (mountainInfluence < 0.2 && y > surfaceHeight - 12) {
                 const coalNoise = noise.noise2D(worldX * 0.1 + y * 0.2, worldZ * 0.1 + y * 0.2);
                 if (coalNoise > 0.6) {
                     blocks[idx] = BlockTypes.COAL_ORE;
                 }
             }
         } else if (y < surfaceHeight) {
-            blocks[idx] = BlockTypes.DIRT;
-        } else if (y === surfaceHeight) {
-            if (surfaceHeight > WATER_LEVEL) {
-                if (surfaceHeight <= WATER_LEVEL + 3) {
-                    const beachNoise = noise.noise2D(worldX * 0.15, worldZ * 0.15);
-                    blocks[idx] = beachNoise > 0.0 ? BlockTypes.SAND : BlockTypes.GRAVEL;
-                } else {
-                    blocks[idx] = BlockTypes.GRASS;
-                }
+            if (mountainInfluence > 0.1) {
+                blocks[idx] = BlockTypes.STONE;
             } else {
-                if (surfaceHeight < WATER_LEVEL - 2) {
-                    blocks[idx] = BlockTypes.SAND;
-                } else {
-                    const beachNoise = noise.noise2D(worldX * 0.2, worldZ * 0.2);
-                    blocks[idx] = beachNoise > 0.2 ? BlockTypes.SAND : BlockTypes.GRAVEL;
+                switch (biome) {
+                    case BiomeTypes.DESERT: blocks[idx] = BlockTypes.RED_SAND; break;
+                    default: blocks[idx] = BlockTypes.DIRT;
+                }
+            }
+        } else if (y === surfaceHeight) {
+            if (surfaceHeight <= WATER_LEVEL) {
+                 blocks[idx] = (biome === BiomeTypes.DESERT) ? BlockTypes.RED_SAND : BlockTypes.SAND;
+            } else if (mountainInfluence > 0.1) {
+                blocks[idx] = (surfaceHeight > SNOW_LINE) ? BlockTypes.SNOW : BlockTypes.STONE;
+            } else {
+                switch (biome) {
+                    case BiomeTypes.DESERT: blocks[idx] = BlockTypes.RED_SAND; break;
+                    case BiomeTypes.TUNDRA: blocks[idx] = BlockTypes.SNOW; break;
+                    case BiomeTypes.TAIGA: blocks[idx] = BlockTypes.PODZOL; break;
+                    case BiomeTypes.SWAMP: blocks[idx] = BlockTypes.CLAY; break;
+                    default: blocks[idx] = BlockTypes.GRASS;
                 }
             }
         } else if (y <= WATER_LEVEL) {
-            blocks[idx] = BlockTypes.WATER;
+            blocks[idx] = (biome === BiomeTypes.TUNDRA && y === WATER_LEVEL) ? BlockTypes.ICE : BlockTypes.WATER;
         } else {
             blocks[idx] = BlockTypes.AIR;
         }
     }
 }
 
+
 // --- TREE GENERATION ---
 function findGroundLevel(blocks, x, z) {
     for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
         const blockType = getBlock(blocks, x, y, z);
-        if (blockType === BlockTypes.GRASS || blockType === BlockTypes.DIRT) {
+        if (blockType === BlockTypes.GRASS || blockType === BlockTypes.DIRT || blockType === BlockTypes.PODZOL || blockType === BlockTypes.RED_SAND || blockType === BlockTypes.SNOW || blockType === BlockTypes.STONE) {
             return y;
         }
     }
@@ -319,46 +428,150 @@ function findGroundLevel(blocks, x, z) {
 
 function generateOakTree(blocks, x, z, groundY) {
     const treeHeight = 4 + Math.floor(Math.random() * 3);
+    
     for (let y = 1; y <= treeHeight; y++) {
-        setBlock(blocks, x, groundY + y, z, BlockTypes.LOG);
+        const trunkY = groundY + y;
+        if (trunkY >= 0 && trunkY < CHUNK_HEIGHT) {
+            const idx = trunkY * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+            blocks[idx] = BlockTypes.LOG;
+        }
     }
     
-    const canopyCenterY = groundY + treeHeight;
-    const canopyRadius = 2 + Math.random() * 0.5;
+    const leafStartY = groundY + Math.max(2, treeHeight - 1);
+    const leafEndY = groundY + treeHeight + 2;
     
-    for (let ly = -2; ly <= 2; ly++) {
-        for (let lx = -2; lx <= 2; lx++) {
-            for (let lz = -2; lz <= 2; lz++) {
-                const dist = Math.sqrt(lx * lx + ly * ly + lz * lz);
-                if (lx === 0 && lz === 0 && ly >= 0) continue;
-                if (dist <= canopyRadius && Math.random() > 0.15) {
-                    setBlock(blocks, x + lx, canopyCenterY + ly, z + lz, BlockTypes.LEAVES);
+    for (let ly = leafStartY; ly <= leafEndY; ly++) {
+        if (ly < 0 || ly >= CHUNK_HEIGHT) continue;
+        
+        const layerFromTop = Math.abs(ly - (groundY + treeHeight));
+        let maxRadius = layerFromTop <= 1 ? 2 : 1;
+        
+        for (let lx = x - maxRadius; lx <= x + maxRadius; lx++) {
+            for (let lz = z - maxRadius; lz <= z + maxRadius; lz++) {
+                if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+                
+                const dx = Math.abs(lx - x);
+                const dz = Math.abs(lz - z);
+                const dist = Math.max(dx, dz);
+                
+                if (dist <= maxRadius && Math.random() > 0.3) {
+                    const idx = ly * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx;
+                    if (blocks[idx] === BlockTypes.AIR) {
+                        blocks[idx] = BlockTypes.LEAVES;
+                    }
                 }
             }
         }
     }
 }
 
+function generateSpruceTree(blocks, x, z, groundY) {
+    const treeHeight = 6 + Math.floor(Math.random() * 4);
+    
+    for (let y = 1; y <= treeHeight; y++) {
+        const trunkY = groundY + y;
+        if (trunkY >= 0 && trunkY < CHUNK_HEIGHT) {
+            const idx = trunkY * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+            blocks[idx] = BlockTypes.SPRUCE_LOG;
+        }
+    }
+    
+    const leafLayers = 4;
+    for (let layer = 0; layer < leafLayers; layer++) {
+        const ly = groundY + treeHeight - layer;
+        if (ly < 0 || ly >= CHUNK_HEIGHT) continue;
+        
+        const radius = Math.min(2, Math.floor(layer / 2) + 1);
+        
+        for (let lx = x - radius; lx <= x + radius; lx++) {
+            for (let lz = z - radius; lz <= z + radius; lz++) {
+                if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+                
+                const dx = Math.abs(lx - x);
+                const dz = Math.abs(lz - z);
+                const manhattanDist = dx + dz;
+                
+                if (manhattanDist <= radius && Math.random() > 0.2) {
+                    const idx = ly * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx;
+                    if (blocks[idx] === BlockTypes.AIR) {
+                        blocks[idx] = BlockTypes.SPRUCE_LEAVES;
+                    }
+                }
+            }
+        }
+    }
+    
+    const topY = groundY + treeHeight + 1;
+    if (topY >= 0 && topY < CHUNK_HEIGHT) {
+        const topIdx = topY * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
+        if (blocks[topIdx] === BlockTypes.AIR) {
+            blocks[topIdx] = BlockTypes.SPRUCE_LEAVES;
+        }
+    }
+}
+
+function generateCactus(blocks, x, z, groundY) {
+    const cactusHeight = 2 + Math.floor(Math.random() * 3);
+    for (let y = 1; y <= cactusHeight; y++) {
+        setBlock(blocks, x, groundY + y, z, BlockTypes.CACTUS);
+    }
+}
+
+function generateDeadBush(blocks, x, z, groundY) {
+    setBlock(blocks, x, groundY + 1, z, BlockTypes.DEAD_BUSH);
+}
+
 function generateTrees(blocks, chunkX, chunkZ) {
     const worldX = chunkX * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE;
-    const treeAttempts = 8;
     
-    for (let i = 0; i < treeAttempts; i++) {
-        const x = 2 + Math.floor(Math.random() * 12);
-        const z = 2 + Math.floor(Math.random() * 12);
-        const wx = worldX + x;
-        const wz = worldZ + z;
-        const treeNoise = noise.noise2D(wx * TREE_NOISE_SCALE, wz * TREE_NOISE_SCALE);
-        
-        if (treeNoise > TREE_THRESHOLD) {
-            const groundY = findGroundLevel(blocks, x, z);
-            if (groundY > WATER_LEVEL && getBlock(blocks, x, groundY, z) === BlockTypes.GRASS) {
-                generateOakTree(blocks, x, z, groundY);
+    for (let x = 2; x < CHUNK_SIZE - 2; x++) {
+        for (let z = 2; z < CHUNK_SIZE - 2; z++) {
+            const wx = worldX + x;
+            const wz = worldZ + z;
+            
+            const treeNoise = noise.noise2D(wx * TREE_NOISE_SCALE, wz * TREE_NOISE_SCALE);
+            
+            if (treeNoise > TREE_THRESHOLD) {
+                const n_wx = (wx + 1) * TREE_NOISE_SCALE, p_wx = (wx - 1) * TREE_NOISE_SCALE;
+                const n_wz = (wz + 1) * TREE_NOISE_SCALE, p_wz = (wz - 1) * TREE_NOISE_SCALE;
+                const c_wx = wx * TREE_NOISE_SCALE, c_wz = wz * TREE_NOISE_SCALE;
+
+                const neighborNoise = [
+                    noise.noise2D(n_wx, c_wz), noise.noise2D(p_wx, c_wz),
+                    noise.noise2D(c_wx, n_wz), noise.noise2D(c_wx, p_wz)
+                ];
+
+                if (neighborNoise.every(n => treeNoise > n)) {
+                    const groundY = findGroundLevel(blocks, x, z);
+                    if (groundY > WATER_LEVEL) {
+                        const surfaceBlock = getBlock(blocks, x, groundY, z);
+                        
+                        if (surfaceBlock === BlockTypes.STONE) continue;
+
+                        const biome = getBiome(wx, wz);
+                        switch (biome) {
+                            case BiomeTypes.FOREST:
+                            case BiomeTypes.PLAINS:
+                                if (surfaceBlock === BlockTypes.GRASS) generateOakTree(blocks, x, z, groundY);
+                                break;
+                            case BiomeTypes.TAIGA:
+                                if (surfaceBlock === BlockTypes.PODZOL) generateSpruceTree(blocks, x, z, groundY);
+                                break;
+                            case BiomeTypes.DESERT:
+                                if (surfaceBlock === BlockTypes.RED_SAND && Math.random() > 0.7) {
+                                    if (Math.random() > 0.5) generateCactus(blocks, x, z, groundY);
+                                    else generateDeadBush(blocks, x, z, groundY);
+                                }
+                                break;
+                        }
+                    }
+                }
             }
         }
     }
 }
+
 
 // --- WORKER MESSAGE HANDLER ---
 onmessage = function(e) {

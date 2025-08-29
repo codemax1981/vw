@@ -65,14 +65,32 @@ class Game {
             [BlockTypes.DIRT]: 'Dirt', [BlockTypes.GRASS]: 'Grass', [BlockTypes.SAND]: 'Sand',
             [BlockTypes.LOG]: 'Log', [BlockTypes.LEAVES]: 'Leaves', [BlockTypes.WATER]: 'Water',
             [BlockTypes.STONE]: 'Stone', [BlockTypes.GRAVEL]: 'Gravel', [BlockTypes.COAL_ORE]: 'Coal Ore',
-            [BlockTypes.BEDROCK]: 'Bedrock'
+            [BlockTypes.BEDROCK]: 'Bedrock',
+            [BlockTypes.SNOW]: 'Snow',
+            [BlockTypes.ICE]: 'Ice',
+            [BlockTypes.CACTUS]: 'Cactus',
+            [BlockTypes.DEAD_BUSH]: 'Dead Bush',
+            [BlockTypes.RED_SAND]: 'Red Sand',
+            [BlockTypes.CLAY]: 'Clay',
+            [BlockTypes.PODZOL]: 'Podzol',
+            [BlockTypes.SPRUCE_LOG]: 'Spruce Log',
+            [BlockTypes.SPRUCE_LEAVES]: 'Spruce Leaves'
         };
         
         this.blockColors = {
             [BlockTypes.DIRT]: '#8B4513', [BlockTypes.GRASS]: '#228B22', [BlockTypes.SAND]: '#F4A460',
             [BlockTypes.LOG]: '#654321', [BlockTypes.LEAVES]: '#32CD32', [BlockTypes.WATER]: '#4169E1',
             [BlockTypes.STONE]: '#808080', [BlockTypes.GRAVEL]: '#999999', [BlockTypes.COAL_ORE]: '#2F2F2F',
-            [BlockTypes.BEDROCK]: '#1A1A1A'
+            [BlockTypes.BEDROCK]: '#1A1A1A',
+            [BlockTypes.SNOW]: '#FFFFFF',
+            [BlockTypes.ICE]: '#B0E0E6',
+            [BlockTypes.CACTUS]: '#228B22',
+            [BlockTypes.DEAD_BUSH]: '#8B4513',
+            [BlockTypes.RED_SAND]: '#CD853F',
+            [BlockTypes.CLAY]: '#A0522D',
+            [BlockTypes.PODZOL]: '#654321',
+            [BlockTypes.SPRUCE_LOG]: '#4A4A4A',
+            [BlockTypes.SPRUCE_LEAVES]: '#2F4F2F'
         };
 
         this.raycaster = new THREE.Raycaster();

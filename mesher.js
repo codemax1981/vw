@@ -1,5 +1,5 @@
 // mesher.js
-import { CHUNK_SIZE } from './utils.js';
+import { CHUNK_SIZE, CHUNK_HEIGHT } from './utils.js';
 
 export class ChunkMesher {
     constructor() {
@@ -38,7 +38,32 @@ export class ChunkMesher {
         }
 
         if (group.children.length === 0) return null;
+        
+        // Position the group at the chunk's world position
         group.position.set(chunkX * CHUNK_SIZE, 0, chunkZ * CHUNK_SIZE);
+        
+        // Set a conservative bounding box for the entire group to prevent culling issues
+        // This ensures the chunk is visible when any part of it should be in view
+        const expandedBoundingBox = new THREE.Box3(
+            new THREE.Vector3(-1, -1, -1), // Slightly expanded bounds
+            new THREE.Vector3(CHUNK_SIZE + 1, CHUNK_HEIGHT + 1, CHUNK_SIZE + 1)
+        );
+        
+        // Apply the bounding box to the group itself
+        group.boundingBox = expandedBoundingBox;
+        
+        // Override the frustum culling for the group
+        group.frustumCulled = true; // Keep frustum culling enabled
+        
+        // Ensure child meshes compute their bounding boxes properly
+        group.children.forEach(child => {
+            if (child.geometry) {
+                // Let Three.js compute the actual geometry bounds
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+            }
+        });
+        
         return group;
     }
 
@@ -48,6 +73,11 @@ export class ChunkMesher {
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.setIndex(new THREE.BufferAttribute(indices, 1));
         geometry.computeVertexNormals();
+        
+        // Let Three.js compute the bounding box and sphere based on actual geometry
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        
         return geometry;
     }
 }

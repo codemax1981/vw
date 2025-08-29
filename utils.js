@@ -2,7 +2,7 @@
 
 // --- World Constants ---
 export const CHUNK_SIZE = 16;
-export const CHUNK_HEIGHT = 64;
+export const CHUNK_HEIGHT = 256;
 export const WATER_LEVEL = 28;
 
 // --- Block Types ---
@@ -14,10 +14,19 @@ export const BlockTypes = {
     LOG: 4,
     LEAVES: 5,
     WATER: 6,
-    STONE: 7,        // NEW
-    GRAVEL: 8,       // NEW
-    COAL_ORE: 9,     // NEW
-    BEDROCK: 10      // NEW
+    STONE: 7,
+    GRAVEL: 8,
+    COAL_ORE: 9,
+    BEDROCK: 10,
+    SNOW: 11,
+    ICE: 12,
+    CACTUS: 13,
+    DEAD_BUSH: 14,
+    RED_SAND: 15,
+    CLAY: 16,
+    PODZOL: 17,
+    SPRUCE_LOG: 18,
+    SPRUCE_LEAVES: 19
 };
 
 export const BlockColors = {
@@ -27,10 +36,19 @@ export const BlockColors = {
     [BlockTypes.LOG]: 0x654321,
     [BlockTypes.LEAVES]: 0x32CD32,
     [BlockTypes.WATER]: 0x4169E1,
-    [BlockTypes.STONE]: 0x808080,      // NEW
-    [BlockTypes.GRAVEL]: 0x999999,     // NEW
-    [BlockTypes.COAL_ORE]: 0x2F2F2F,   // NEW
-    [BlockTypes.BEDROCK]: 0x1A1A1A     // NEW
+    [BlockTypes.STONE]: 0x808080,
+    [BlockTypes.GRAVEL]: 0x999999,
+    [BlockTypes.COAL_ORE]: 0x2F2F2F,
+    [BlockTypes.BEDROCK]: 0x1A1A1A,
+    [BlockTypes.SNOW]: 0xFFFFFF,
+    [BlockTypes.ICE]: 0xB0E0E6,
+    [BlockTypes.CACTUS]: 0x228B22,
+    [BlockTypes.DEAD_BUSH]: 0x8B4513,
+    [BlockTypes.RED_SAND]: 0xCD853F,
+    [BlockTypes.CLAY]: 0xA0522D,
+    [BlockTypes.PODZOL]: 0x654321,
+    [BlockTypes.SPRUCE_LOG]: 0x4A4A4A,
+    [BlockTypes.SPRUCE_LEAVES]: 0x2F4F2F
 };
 
 export function getBlockColor(blockType) {
