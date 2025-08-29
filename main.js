@@ -155,7 +155,7 @@ class Game {
         this.audioManager.playSound('break', 0.6);
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
         
-        // IMMEDIATE VISUAL FEEDBACK - Remove any temporary blocks at this position
+        // Remove existing temporary blocks (if any)
         const existingTemp = this.scene.children.find(child => 
             child.userData.isTemporary && 
             child.userData.blockPosition.x === tgt.x &&
@@ -169,6 +169,7 @@ class Game {
         }
         
         this.markChunkForRemesh(tgt.x, tgt.y, tgt.z);
+        this.updateChunkMeshes(); // Add this line for immediate visual update
     }
       
     setupInventory() {
@@ -281,13 +282,14 @@ class Game {
         this.audioManager.playSound('place', 0.8);
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         
-        // IMMEDIATE VISUAL FEEDBACK - Add temporary block
+        // Add temporary block for immediate feedback
         const tempMesh = this.createTemporaryBlockMesh(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         if (tempMesh) {
             this.scene.add(tempMesh);
         }
         
         this.markChunkForRemesh(placePos.x, placePos.y, placePos.z);
+        this.updateChunkMeshes(); // Add this line for immediate visual update
     }
 
     cleanupTemporaryBlocks(chunkX, chunkZ) {
