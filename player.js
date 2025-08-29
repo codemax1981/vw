@@ -60,17 +60,15 @@ export class Player {
         return this.isFlying;
     }
 
-    update(deltaTime) {
+    update(deltaTime, touchMoveVector = null) {
         this.handleMouseLook();
         
-        // --- UPDATED LOGIC ---
         if (this.isFlying) {
-            this.handleFlyMovement(deltaTime);
+            this.handleFlyMovement(deltaTime, touchMoveVector);
         } else {
-            this.handleMovement(deltaTime);
+            this.handleMovement(deltaTime, touchMoveVector);
             this.applyPhysics(deltaTime);
         }
-        // --- END UPDATED LOGIC ---
 
         this.updateCameraPosition();
     }
@@ -83,17 +81,22 @@ export class Player {
         this.mouseMovement.y = 0;
     }
 
-    // --- NEW METHOD for flying ---
-    handleFlyMovement(deltaTime) {
+    handleFlyMovement(deltaTime, touchMoveVector = null) {
         const forward = new THREE.Vector3();
-        this.camera.getWorldDirection(forward); // Use camera direction for up/down movement
+        this.camera.getWorldDirection(forward);
         const right = new THREE.Vector3().crossVectors(this.camera.up, forward).normalize();
         const moveVector = new THREE.Vector3();
 
-        if (this.keys['KeyW']) moveVector.add(forward);
-        if (this.keys['KeyS']) moveVector.sub(forward);
-        if (this.keys['KeyD']) moveVector.add(right);
-        if (this.keys['KeyA']) moveVector.sub(right);
+        if (touchMoveVector) {
+            moveVector.add(forward.clone().multiplyScalar(touchMoveVector.y));
+            moveVector.add(right.clone().multiplyScalar(touchMoveVector.x));
+        } else {
+            if (this.keys['KeyW']) moveVector.add(forward);
+            if (this.keys['KeyS']) moveVector.sub(forward);
+            if (this.keys['KeyD']) moveVector.add(right);
+            if (this.keys['KeyA']) moveVector.sub(right);
+        }
+        
         if (this.keys['Space']) moveVector.y += 1;
         if (this.keys['ShiftLeft']) moveVector.y -= 1;
 
@@ -101,19 +104,23 @@ export class Player {
             moveVector.normalize();
         }
 
-        // Flying is like noclip, we move directly without physics/collision
         this.position.add(moveVector.multiplyScalar(this.flySpeed * deltaTime));
     }
 
-    handleMovement(deltaTime) {
+    handleMovement(deltaTime, touchMoveVector = null) {
         const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
         const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
         const moveVector = new THREE.Vector3();
 
-        if (this.keys['KeyW']) moveVector.add(forward);
-        if (this.keys['KeyS']) moveVector.sub(forward);
-        if (this.keys['KeyD']) moveVector.add(right);
-        if (this.keys['KeyA']) moveVector.sub(right);
+        if (touchMoveVector) {
+            moveVector.add(forward.clone().multiplyScalar(touchMoveVector.y));
+            moveVector.add(right.clone().multiplyScalar(touchMoveVector.x));
+        } else {
+            if (this.keys['KeyW']) moveVector.add(forward);
+            if (this.keys['KeyS']) moveVector.sub(forward);
+            if (this.keys['KeyD']) moveVector.add(right);
+            if (this.keys['KeyA']) moveVector.sub(right);
+        }
 
         if (moveVector.length() > 0) moveVector.normalize().multiplyScalar(this.speed);
 

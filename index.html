@@ -1,10 +1,8 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Voxel Game</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -32,7 +30,20 @@
         
         <div id="instructions">
             WASD: Move | Mouse: Look | Left Click: Break | Right Click: Place<br>
-            E: Inventory | 1-6: Quick Select | \: Settings Menu
+            E: Inventory | 1-9: Quick Select | \: Settings Menu
+        </div>
+    </div>
+    
+    <!-- NEW: Touch Controls -->
+    <div id="touchControls" class="hidden">
+        <div id="joystick">
+            <div id="joystick-stick"></div>
+        </div>
+        <div id="actionButtons">
+            <button id="jumpBtn" class="action-btn">↑</button>
+            <button id="flyDownBtn" class="action-btn hidden">↓</button>
+            <button id="breakBtn" class="action-btn">B</button>
+            <button id="placeBtn" class="action-btn">P</button>
         </div>
     </div>
 

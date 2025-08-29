@@ -97,6 +97,18 @@ class Game {
         this.mouse = new THREE.Vector2();
         this.maxReach = 5;
 
+        // --- NEW: Mobile Support ---
+        this.isMobile = 'ontouchstart' in window;
+        this.touchState = {
+            joystick: {
+                active: false, touchId: null,
+                base: new THREE.Vector2(), current: new THREE.Vector2(),
+                maxRadius: 50,
+            },
+            look: { active: false, touchId: null, last: new THREE.Vector2() },
+            moveVector: new THREE.Vector2()
+        };
+
         this.setupMouseEvents();
         this.setupInventory();
         
@@ -115,26 +127,19 @@ class Game {
                 const { chunkX, chunkZ, opaqueData, transparentData } = e.data;
                 const chunk = this.world.getChunk(chunkX, chunkZ);
                 if (chunk) {
-                    // --- MODIFIED: ATOMIC SWAP LOGIC ---
-                    // 1. Remove the old mesh if it exists
                     if (chunk.mesh) {
                         this.scene.remove(chunk.mesh);
                         chunk.mesh.traverse(child => {
                             if (child.geometry) child.geometry.dispose();
                         });
                     }
-                    
-                    // 2. Create the new mesh from the worker's data
                     const newMesh = this.mesher.createMeshFromData(opaqueData, transparentData, chunkX, chunkZ);
-                    
-                    // 3. Add the new mesh to the scene and update the chunk object
                     if (newMesh) {
                         chunk.mesh = newMesh;
                         this.scene.add(newMesh);
                     } else {
-                        chunk.mesh = null; // Ensure mesh is null if no geometry was created
+                        chunk.mesh = null;
                     }
-                    
                     chunk.isMeshing = false;
                 }
             }
@@ -149,7 +154,7 @@ class Game {
     setupMouseEvents() {
         document.addEventListener('click', () => {
             this.audioManager.unlockAudio();
-            if (document.pointerLockElement !== document.body && !this._devMenuOpen && !this._inventoryOpen) {
+            if (!this.isMobile && document.pointerLockElement !== document.body && !this._devMenuOpen && !this._inventoryOpen) {
                 document.body.requestPointerLock();
             }
         });
@@ -166,6 +171,97 @@ class Game {
         });
     }
 
+    setupTouchControls() {
+        if (!this.isMobile) return;
+
+        const controls = document.getElementById('touchControls');
+        controls.classList.remove('hidden');
+
+        const joystick = document.getElementById('joystick');
+        const joystickStick = document.getElementById('joystick-stick');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const breakBtn = document.getElementById('breakBtn');
+        const placeBtn = document.getElementById('placeBtn');
+        const flyDownBtn = document.getElementById('flyDownBtn');
+
+        const instructions = document.getElementById('instructions');
+        if (instructions) instructions.style.display = 'none';
+
+        joystick.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (this.touchState.joystick.active) return;
+            const touch = e.changedTouches[0];
+            this.touchState.joystick.active = true;
+            this.touchState.joystick.touchId = touch.identifier;
+            const rect = joystick.getBoundingClientRect();
+            this.touchState.joystick.base.set(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            this.touchState.joystick.current.set(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        jumpBtn.addEventListener('touchstart', () => { this.player.keys['Space'] = true; });
+        jumpBtn.addEventListener('touchend', () => { this.player.keys['Space'] = false; });
+        flyDownBtn.addEventListener('touchstart', () => { this.player.keys['ShiftLeft'] = true; });
+        flyDownBtn.addEventListener('touchend', () => { this.player.keys['ShiftLeft'] = false; });
+        breakBtn.addEventListener('touchstart', () => this.breakBlock());
+        placeBtn.addEventListener('touchstart', () => this.placeBlock());
+
+        this.renderer.domElement.addEventListener('touchstart', (e) => {
+            for (const touch of e.changedTouches) {
+                if (touch.identifier === this.touchState.joystick.touchId) continue;
+                if (!this.touchState.look.active) {
+                    this.touchState.look.active = true;
+                    this.touchState.look.touchId = touch.identifier;
+                    this.touchState.look.last.set(touch.clientX, touch.clientY);
+                    break;
+                }
+            }
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            for (const touch of e.changedTouches) {
+                if (touch.identifier === this.touchState.joystick.touchId) {
+                    this.touchState.joystick.current.set(touch.clientX, touch.clientY);
+                    const offset = this.touchState.joystick.current.clone().sub(this.touchState.joystick.base);
+                    const distance = offset.length();
+                    
+                    if (distance > this.touchState.joystick.maxRadius) {
+                        offset.normalize().multiplyScalar(this.touchState.joystick.maxRadius);
+                    }
+                    
+                    joystickStick.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
+                    
+                    this.touchState.moveVector.set(
+                        offset.x / this.touchState.joystick.maxRadius,
+                        -offset.y / this.touchState.joystick.maxRadius
+                    );
+                } else if (touch.identifier === this.touchState.look.touchId) {
+                    const current = new THREE.Vector2(touch.clientX, touch.clientY);
+                    const delta = current.clone().sub(this.touchState.look.last);
+                    
+                    this.player.mouseMovement.x += delta.x;
+                    this.player.mouseMovement.y += delta.y;
+                    
+                    this.touchState.look.last.copy(current);
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            for (const touch of e.changedTouches) {
+                if (touch.identifier === this.touchState.joystick.touchId) {
+                    this.touchState.joystick.active = false;
+                    this.touchState.joystick.touchId = null;
+                    joystickStick.style.transform = `translate(0px, 0px)`;
+                    this.touchState.moveVector.set(0, 0);
+                } else if (touch.identifier === this.touchState.look.touchId) {
+                    this.touchState.look.active = false;
+                    this.touchState.look.touchId = null;
+                }
+            }
+        });
+    }
+
     breakBlock() {
         const tgt = this.getTargetBlock();
         if (!tgt || tgt.type === BlockTypes.WATER || tgt.type === BlockTypes.BEDROCK) return;
@@ -173,7 +269,6 @@ class Game {
         this.audioManager.playSound('break', 0.6);
         this.world.setBlock(tgt.x, tgt.y, tgt.z, BlockTypes.AIR);
         
-        // Remove existing temporary blocks (if any)
         const existingTemp = this.scene.children.find(child => 
             child.userData.isTemporary && 
             child.userData.blockPosition.x === tgt.x &&
@@ -187,7 +282,7 @@ class Game {
         }
         
         this.markChunkForRemesh(tgt.x, tgt.y, tgt.z);
-        this.updateChunkMeshes(); // Add this line for immediate visual update
+        this.updateChunkMeshes();
     }
       
     setupInventory() {
@@ -300,21 +395,19 @@ class Game {
         this.audioManager.playSound('place', 0.8);
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         
-        // Add temporary block for immediate feedback
         const tempMesh = this.createTemporaryBlockMesh(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         if (tempMesh) {
             this.scene.add(tempMesh);
         }
         
         this.markChunkForRemesh(placePos.x, placePos.y, placePos.z);
-        this.updateChunkMeshes(); // Add this line for immediate visual update
+        this.updateChunkMeshes();
     }
 
     cleanupTemporaryBlocks(chunkX, chunkZ) {
         const chunkWorldX = chunkX * 16;
         const chunkWorldZ = chunkZ * 16;
         
-        // Remove temporary blocks within this chunk's bounds
         const tempBlocks = this.scene.children.filter(child => 
             child.userData.isTemporary &&
             child.userData.blockPosition.x >= chunkWorldX &&
@@ -343,7 +436,6 @@ class Game {
         if (localZ === 15) this.remeshChunk(chunkX, chunkZ + 1);
     }
 
-    // --- MODIFIED: This function now only flags the chunk for an update ---
     remeshChunk(chunkX, chunkZ) {
         const chunk = this.world.getChunk(chunkX, chunkZ);
         if (chunk) {
@@ -357,6 +449,12 @@ class Game {
         this.renderer.setClearColor(0x87CEEB);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        if (this.isMobile) {
+            this.world.setRenderDistance(3);
+            this.renderDistanceSlider.value = 3;
+            this.renderValue.textContent = 3;
+        }
 
         const initialFogDist = this.world.renderDistance * 16 * 0.9;
         this.scene.fog = new THREE.Fog(0x87CEEB, 0, initialFogDist);
@@ -390,6 +488,7 @@ class Game {
 
         this.setupDevMenu();
         this.setupKeyBindings();
+        this.setupTouchControls();
         this.setupAudio();
         this.initialWorldLoad();
     }
@@ -425,7 +524,7 @@ class Game {
             if (e.code === 'KeyE' && !this._devMenuOpen) {
                 this._inventoryOpen = !this._inventoryOpen;
                 if (this.inventoryUI) this.inventoryUI.style.display = this._inventoryOpen ? 'block' : 'none';
-                if (this._inventoryOpen) document.exitPointerLock();
+                if (this._inventoryOpen && !this.isMobile) document.exitPointerLock();
             }
         });
     }
@@ -436,7 +535,7 @@ class Game {
             if (e.code === 'Backslash' && !this._devMenuOpen && !this._inventoryOpen) {
                 this._devMenuOpen = true;
                 this.devMenu.style.display = 'block';
-                document.exitPointerLock();
+                if (!this.isMobile) document.exitPointerLock();
             } else if (e.code === 'Escape') {
                 if (this._devMenuOpen) {
                     this._devMenuOpen = false;
@@ -455,6 +554,9 @@ class Game {
         this.toggleFlyBtn.addEventListener('click', () => {
             const isFlying = this.player.toggleFly();
             this.toggleFlyBtn.textContent = `Toggle Fly (${isFlying ? 'On' : 'Off'})`;
+            if (this.isMobile) {
+                document.getElementById('flyDownBtn').classList.toggle('hidden', !isFlying);
+            }
         });
         this.renderDistanceSlider.addEventListener('input', () => {
             const distance = parseInt(this.renderDistanceSlider.value, 10);
@@ -489,7 +591,7 @@ class Game {
         });
 
         this.updateLoadingProgress(10, "Generating spawn area...");
-        const initialLoadSize = 3;
+        const initialLoadSize = this.isMobile ? 2 : 3;
         const promises = [];
         const totalChunks = Math.pow(initialLoadSize * 2 + 1, 2);
         let chunksGenerated = 0;
@@ -585,7 +687,7 @@ class Game {
         this.audioManager.update(deltaTime);
 
         if (!this._devMenuOpen && !this._inventoryOpen) {
-            this.player.update(deltaTime);
+            this.player.update(deltaTime, this.isMobile ? this.touchState.moveVector : null);
             this.mobManager.update(deltaTime, this.player.position);
         }
         
@@ -610,8 +712,6 @@ class Game {
         this.renderer.render(this.scene, this.camera);
     }
 
-
-
     updateWorldChunks() {
         const loadedCount = this.world.updateLoadedChunks(this.player.position.x, this.player.position.z);
         const { x, z } = worldToChunkCoords(this.player.position.x, this.player.position.z);
@@ -620,7 +720,6 @@ class Game {
 
     updateChunkMeshes() {
         for (const chunk of this.world.chunks.values()) {
-            // --- MODIFIED: Condition now checks for needsRemesh flag OR if it has no mesh ---
             if ((chunk.generated && !chunk.mesh) || chunk.needsRemesh) {
                 if (!chunk.isMeshing) {
                     const neighbors = {
@@ -634,7 +733,7 @@ class Game {
 
                     if (allNeighborsReady) {
                         chunk.isMeshing = true;
-                        chunk.needsRemesh = false; // Reset the flag
+                        chunk.needsRemesh = false;
                         
                         const neighborData = {
                             north: neighbors.north.blocks,
