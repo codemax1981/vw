@@ -19,7 +19,7 @@ export class Player {
         this.gravity = -20.0;
         
         // MODIFIED: Set sensitivity based on device type
-        this.mouseSensitivity = isMobile ? 2 : 0.002;
+        this.mouseSensitivity = isMobile ? 0.1 : 0.010;
         
         // Player dimensions
         this.width = 0.6;
