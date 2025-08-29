@@ -22,7 +22,7 @@ class Game {
         this.setupWorker();
 
         this.world = new World(this.worldWorker);
-        this.player = new Player(this.camera, this.world);
+        this.player = new Player(this.camera, this.world, this.isMobile);
         this.mesher = new ChunkMesher();
         this.mobManager = new MobManager(this.scene, this.world);
         

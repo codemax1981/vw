@@ -3,22 +3,23 @@
 import { BlockTypes } from './utils.js';
 
 export class Player {
-    constructor(camera, world) {
+    // MODIFIED: Accept isMobile flag in the constructor
+    constructor(camera, world, isMobile = false) {
         this.camera = camera;
         this.world = world;
         this.position = new THREE.Vector3(0, 50, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.onGround = false;
         
-        // --- NEW PROPERTIES ---
         this.isFlying = false;
         this.flySpeed = 15.0;
-        // --- END NEW PROPERTIES ---
 
         this.speed = 5.0;
         this.jumpSpeed = 8.0;
         this.gravity = -20.0;
-        this.mouseSensitivity = 0.002;
+        
+        // MODIFIED: Set sensitivity based on device type
+        this.mouseSensitivity = isMobile ? 0.010 : 0.002;
         
         // Player dimensions
         this.width = 0.6;
@@ -50,10 +51,8 @@ export class Player {
         });
     }
 
-    // --- NEW METHOD ---
     toggleFly() {
         this.isFlying = !this.isFlying;
-        // Reset vertical velocity when stopping flight to prevent falling
         if (!this.isFlying) {
             this.velocity.y = 0;
         }
@@ -133,24 +132,17 @@ export class Player {
         }
     }
 
-    // ... (rest of the file is unchanged)
     applyPhysics(deltaTime) {
-        // Apply gravity
         this.velocity.y += this.gravity * deltaTime;
         
-        // Store the previous position
         const oldPosition = this.position.clone();
         
-        // Reset ground state
         this.onGround = false;
 
-        // Move horizontally first (X and Z together)
         this.moveHorizontally(deltaTime);
         
-        // Then move vertically
         this.moveVertically(deltaTime);
 
-        // Safety check - if player gets stuck or moved too far, revert
         const movementDistance = this.position.distanceTo(oldPosition);
         if (movementDistance > this.speed * deltaTime * 2 + Math.abs(this.velocity.y * deltaTime) + 2) {
             console.warn('Excessive movement detected, reverting position');
@@ -158,7 +150,6 @@ export class Player {
             this.velocity.set(0, 0, 0);
         }
 
-        // Reset if player falls through world
         if (this.position.y < -10) {
             this.position.set(0, 50, 0);
             this.velocity.set(0, 0, 0);
@@ -173,19 +164,16 @@ export class Player {
 
         const newPosition = this.position.clone().add(horizontalMovement);
         
-        // Check collision at new position
         if (this.canMoveTo(newPosition)) {
             this.position.copy(newPosition);
             return;
         }
 
-        // Try step-up if grounded
         if (this.onGround || this.isOnGround()) {
             const stepUpPos = newPosition.clone();
             stepUpPos.y += this.stepHeight;
             
             if (this.canMoveTo(stepUpPos)) {
-                // Find the exact step height needed
                 for (let step = 0.1; step <= this.stepHeight; step += 0.1) {
                     const testPos = newPosition.clone();
                     testPos.y += step;
@@ -198,7 +186,6 @@ export class Player {
             }
         }
 
-        // Try sliding along walls - test X and Z axes separately
         const xMovement = new THREE.Vector3(horizontalMovement.x, 0, 0);
         const zMovement = new THREE.Vector3(0, 0, horizontalMovement.z);
 
@@ -209,9 +196,8 @@ export class Player {
             this.position.copy(xPos);
         } else if (this.canMoveTo(zPos)) {
             this.position.copy(zPos);
-            this.velocity.x = 0; // Stop X movement if hitting wall
+            this.velocity.x = 0;
         } else {
-            // Can't move in either direction, stop horizontal movement
             this.velocity.x = 0;
             this.velocity.z = 0;
         }
@@ -221,7 +207,6 @@ export class Player {
         const verticalMovement = this.velocity.y * deltaTime;
         
         if (Math.abs(verticalMovement) < 0.001) {
-            // Check if we're on ground even without movement
             this.onGround = this.isOnGround();
             return;
         }
@@ -233,13 +218,10 @@ export class Player {
             this.position.copy(newPosition);
             this.onGround = false;
         } else {
-            // Collision detected
             if (this.velocity.y < 0) {
-                // Falling - hit ground
                 this.onGround = true;
                 this.position.y = this.findGroundLevel();
             } else {
-                // Rising - hit ceiling
                 this.position.y = this.findCeilingLevel();
             }
             this.velocity.y = 0;
@@ -249,12 +231,10 @@ export class Player {
     canMoveTo(position) {
         const bounds = this.getBounds(position);
         
-        // Check all blocks within the player's bounding box
         for (let x = Math.floor(bounds.min.x); x <= Math.floor(bounds.max.x); x++) {
             for (let y = Math.floor(bounds.min.y); y <= Math.floor(bounds.max.y); y++) {
                 for (let z = Math.floor(bounds.min.z); z <= Math.floor(bounds.max.z); z++) {
                     if (this.isBlockSolid(x, y, z)) {
-                        // Check if bounding box actually intersects with this block
                         if (this.intersectsBlock(bounds, x, y, z)) {
                             return false;
                         }
@@ -291,12 +271,11 @@ export class Player {
 
     isOnGround() {
         const testPos = this.position.clone();
-        testPos.y -= 0.1; // Check slightly below current position
+        testPos.y -= 0.1;
         return !this.canMoveTo(testPos);
     }
 
     findGroundLevel() {
-        // Find the exact Y position where player can stand
         for (let y = Math.floor(this.position.y); y >= Math.floor(this.position.y) - 2; y -= 0.1) {
             const testPos = this.position.clone();
             testPos.y = y;
@@ -305,11 +284,10 @@ export class Player {
                 return y;
             }
         }
-        return this.position.y; // Fallback to current position
+        return this.position.y;
     }
 
     findCeilingLevel() {
-        // Find the exact Y position below ceiling
         for (let y = Math.ceil(this.position.y + this.height); y <= Math.ceil(this.position.y + this.height) + 2; y += 0.1) {
             const testPos = this.position.clone();
             testPos.y = y - this.height;
@@ -318,7 +296,7 @@ export class Player {
                 return y - this.height;
             }
         }
-        return this.position.y; // Fallback to current position
+        return this.position.y;
     }
 
     isBlockSolid(x, y, z) {
@@ -337,7 +315,6 @@ export class Player {
         this.camera.rotation.x = this.pitch;
     }
 
-    // Utility method for debugging
     getDebugInfo() {
         return {
             position: this.position.clone(),

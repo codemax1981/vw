@@ -80,7 +80,7 @@ body, html {
 /* Selected Block Indicator */
 #selectedBlock {
     position: fixed;
-    top: 20px; /* MODIFIED: Was bottom */
+    top: 20px;
     right: 20px;
     z-index: 1500;
     pointer-events: none;
@@ -253,7 +253,7 @@ body.loaded #loading {
     visibility: hidden;
 }
 
-/* --- NEW: Mobile & Touch Controls --- */
+/* --- Mobile & Touch Controls --- */
 .hidden {
     display: none !important;
 }
@@ -300,6 +300,12 @@ body.loaded #loading {
     align-items: center;
     gap: 15px;
     pointer-events: auto;
+}
+
+/* NEW: Rule for horizontal button groups */
+.button-row {
+    display: flex;
+    gap: 15px;
 }
 
 .action-btn {
