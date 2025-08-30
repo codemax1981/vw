@@ -17,10 +17,15 @@ export class Player {
         this.jumpSpeed = 8.0;
         this.gravity = -20.0;
         
-        // Set sensitivity based on device type:
-        // - 0.1 for fast mobile touch controls
-        // - 0.002 for the original, slower desktop mouse controls
-        this.mouseSensitivity = isMobile ? 0.1 : 0.002;
+        // --- NEW: Swimming Properties ---
+        this.isInWater = false;
+        this.swimSpeed = 2.5;
+        this.waterDrag = 0.9;
+        
+        // --- MODIFIED: Enhanced Sensitivity Handling ---
+        // Set a base sensitivity appropriate for the device. The slider will adjust the multiplier.
+        this.baseMouseSensitivity = isMobile ? 0.05 : 0.002;
+        this.mouseSensitivityMultiplier = 1.0; // Default (corresponds to 50 on the slider)
         
         // Player dimensions
         this.width = 0.6;
@@ -52,6 +57,16 @@ export class Player {
         });
     }
 
+    /**
+     * Sets the sensitivity multiplier based on a slider value (1-100).
+     * @param {number} value The value from the settings slider.
+     */
+    setMouseSensitivity(value) {
+        // Maps the slider value (where 50 is default) to a sensitivity multiplier.
+        // e.g., value=1 -> multiplier=0.02, value=50 -> multiplier=1.0, value=100 -> multiplier=2.0
+        this.mouseSensitivityMultiplier = value / 50.0;
+    }
+
     toggleFly() {
         this.isFlying = !this.isFlying;
         if (!this.isFlying) {
@@ -60,7 +75,18 @@ export class Player {
         return this.isFlying;
     }
 
+    /** NEW: Checks if the player is in a water block. */
+    checkWaterState() {
+        const playerFeetX = Math.floor(this.position.x);
+        const playerFeetY = Math.floor(this.position.y);
+        const playerFeetZ = Math.floor(this.position.z);
+        
+        const blockAtFeet = this.world.getBlock(playerFeetX, playerFeetY, playerFeetZ);
+        this.isInWater = blockAtFeet === BlockTypes.WATER;
+    }
+
     update(deltaTime, touchMoveVector = null) {
+        this.checkWaterState(); // Check for water before doing anything else
         this.handleMouseLook();
         
         if (this.isFlying) {
@@ -74,8 +100,11 @@ export class Player {
     }
 
     handleMouseLook() {
-        this.yaw -= this.mouseMovement.x * this.mouseSensitivity;
-        this.pitch -= this.mouseMovement.y * this.mouseSensitivity;
+        // --- MODIFIED: Use new sensitivity calculation ---
+        const effectiveSensitivity = this.baseMouseSensitivity * this.mouseSensitivityMultiplier;
+        this.yaw -= this.mouseMovement.x * effectiveSensitivity;
+        this.pitch -= this.mouseMovement.y * effectiveSensitivity;
+        
         this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
         this.mouseMovement.x = 0;
         this.mouseMovement.y = 0;
@@ -107,6 +136,7 @@ export class Player {
         this.position.add(moveVector.multiplyScalar(this.flySpeed * deltaTime));
     }
 
+    /** MODIFIED: Added swimming logic */
     handleMovement(deltaTime, touchMoveVector = null) {
         const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
         const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -122,26 +152,50 @@ export class Player {
             if (this.keys['KeyA']) moveVector.sub(right);
         }
 
-        if (moveVector.length() > 0) moveVector.normalize().multiplyScalar(this.speed);
+        const currentSpeed = this.isInWater ? this.swimSpeed : this.speed;
+        if (moveVector.length() > 0) moveVector.normalize().multiplyScalar(currentSpeed);
 
         this.velocity.x = moveVector.x;
         this.velocity.z = moveVector.z;
 
-        if (this.keys['Space'] && this.onGround) {
-            this.velocity.y = this.jumpSpeed;
-            this.onGround = false;
+        // Handle jump / swim up
+        if (this.keys['Space']) {
+            if (this.onGround) {
+                this.velocity.y = this.jumpSpeed;
+                this.onGround = false;
+            } else if (this.isInWater) {
+                this.velocity.y = this.jumpSpeed * 0.6; // Swim up
+            }
+        }
+        
+        // Handle swim down
+        if (this.keys['ShiftLeft'] && this.isInWater) {
+            this.velocity.y = -this.jumpSpeed * 0.5;
         }
     }
 
+    /** MODIFIED: Added water physics (drag and buoyancy) */
     applyPhysics(deltaTime) {
-        this.velocity.y += this.gravity * deltaTime;
+        if (this.isInWater) {
+            // Apply drag to horizontal movement
+            this.velocity.x *= this.waterDrag;
+            this.velocity.z *= this.waterDrag;
+
+            // Apply reduced gravity (buoyancy) and cap fall speed
+            this.velocity.y += this.gravity * 0.25 * deltaTime;
+            if (this.velocity.y < -this.swimSpeed) {
+                this.velocity.y = -this.swimSpeed;
+            }
+        } else {
+            // Apply normal gravity
+            this.velocity.y += this.gravity * deltaTime;
+        }
         
         const oldPosition = this.position.clone();
         
         this.onGround = false;
 
         this.moveHorizontally(deltaTime);
-        
         this.moveVertically(deltaTime);
 
         const movementDistance = this.position.distanceTo(oldPosition);
@@ -300,6 +354,7 @@ export class Player {
         return this.position.y;
     }
 
+    /** MODIFIED: This correctly treats water as non-solid for collision purposes */
     isBlockSolid(x, y, z) {
         const blockType = this.world.getBlock(x, y, z);
         return blockType !== BlockTypes.AIR && blockType !== BlockTypes.WATER;

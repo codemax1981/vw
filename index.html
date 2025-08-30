@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,7 +34,7 @@
         
         <div id="instructions">
             WASD: Move | Mouse: Look | Left Click: Break | Right Click: Place<br>
-            E: Inventory | 1-9: Quick Select | \: Settings Menu
+            E: Inventory | 1-9: Quick Select | Escape: Settings Menu
         </div>
     </div>
     
@@ -82,18 +84,25 @@
         </div>
     </div>
 
-    <!-- Developer Menu -->
-    <div id="devMenu" style="display: none;">
+    <!-- MODIFIED: Renamed and enhanced the settings menu -->
+    <div id="settingsMenu" style="display: none;">
         <h2>Settings</h2>
-        <button id="toggleFlyMode">Toggle Fly (Off)</button>
-        <hr style="margin: 12px 0;">
+
+        <label for="fov">Field of View: <span id="fovValue">75</span></label>
+        <input type="range" id="fov" min="60" max="110" value="75">
+        
+        <label for="sensitivity">Mouse Sensitivity: <span id="sensitivityValue">50</span></label>
+        <input type="range" id="sensitivity" min="1" max="100" value="50">
+
         <label for="renderDistance">Render Distance: <span id="renderValue">6</span></label>
-        <input type="range" id="renderDistance" min="2" max="12" value="6">
-        <hr style="margin: 12px 0;">
+        <input type="range" id="renderDistance" min="2" max="16" value="6">
+        
         <label for="fogRange">Fog Distance: <span id="fogValue">96</span></label>
-        <input type="range" id="fogRange" min="50" max="200" value="96">
-        <hr style="margin: 12px 0;">
-        <button id="closeDevMenu">Close</button>
+        <input type="range" id="fogRange" min="50" max="300" value="96">
+        
+        <button id="toggleFlyMode">Toggle Fly (Off)</button>
+        
+        <button id="closeSettingsMenu">Close</button>
     </div>
 
     <script type="module" src="main.js"></script>

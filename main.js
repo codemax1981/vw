@@ -46,14 +46,19 @@ class Game {
         this.lastChunkUpdate = 0;
         this.lastHUDUpdate = 0;
 
-        this.devMenu = document.getElementById('devMenu');
+        // --- MODIFIED: Settings Menu Properties ---
+        this.settingsMenu = document.getElementById('settingsMenu');
         this.fogRange = document.getElementById('fogRange');
         this.fogValue = document.getElementById('fogValue');
-        this.closeDevMenuBtn = document.getElementById('closeDevMenu');
+        this.closeSettingsMenuBtn = document.getElementById('closeSettingsMenu');
         this.toggleFlyBtn = document.getElementById('toggleFlyMode');
         this.renderDistanceSlider = document.getElementById('renderDistance');
         this.renderValue = document.getElementById('renderValue');
-        this._devMenuOpen = false;
+        this.fovSlider = document.getElementById('fov');
+        this.fovValue = document.getElementById('fovValue');
+        this.sensitivitySlider = document.getElementById('sensitivity');
+        this.sensitivityValue = document.getElementById('sensitivityValue');
+        this._settingsOpen = false;
 
         this.inventoryUI = document.getElementById('inventoryUI');
         this.blockSelector = document.getElementById('blockSelector');
@@ -154,13 +159,13 @@ class Game {
     setupMouseEvents() {
         document.addEventListener('click', () => {
             this.audioManager.unlockAudio();
-            if (!this.isMobile && document.pointerLockElement !== document.body && !this._devMenuOpen && !this._inventoryOpen) {
+            if (!this.isMobile && document.pointerLockElement !== document.body && !this._settingsOpen && !this._inventoryOpen) {
                 document.body.requestPointerLock();
             }
         });
 
         document.addEventListener('mousedown', (e) => {
-            if (document.pointerLockElement !== document.body || this._devMenuOpen || this._inventoryOpen) return;
+            if (document.pointerLockElement !== document.body || this._settingsOpen || this._inventoryOpen) return;
             e.preventDefault();
             if (e.button === 0) this.breakBlock();
             else if (e.button === 2) this.placeBlock();
@@ -333,12 +338,13 @@ class Game {
         return null;
     }
 
+    /** MODIFIED: Updated to allow placing blocks inside water */
     getPlacePosition() {
         const direction = new THREE.Vector3();
         this.camera.getWorldDirection(direction);
         const origin = this.camera.position.clone();
         const step = 0.2;
-        let lastAirPos = null;
+        let lastReplaceablePos = null;
 
         for (let distance = step; distance < this.maxReach; distance += step) {
             const pos = origin.clone().add(direction.clone().multiplyScalar(distance));
@@ -347,10 +353,12 @@ class Game {
             const blockZ = Math.floor(pos.z);
             const blockType = this.world.getBlock(blockX, blockY, blockZ);
 
-            if (blockType === BlockTypes.AIR) {
-                lastAirPos = { x: blockX, y: blockY, z: blockZ };
+            // A block can be placed in AIR or WATER
+            if (blockType === BlockTypes.AIR || blockType === BlockTypes.WATER) {
+                lastReplaceablePos = { x: blockX, y: blockY, z: blockZ };
             } else {
-                return lastAirPos;
+                // We hit a solid block, so the last replaceable position is our target
+                return lastReplaceablePos;
             }
         }
         return null;
@@ -375,11 +383,11 @@ class Game {
         
         return mesh;
     }
-        
+    
+    /** MODIFIED: Removed incorrect check to allow placing blocks in water */
     placeBlock() {
         const placePos = this.getPlacePosition();
         if (!placePos) return;
-        if (this.world.getBlock(placePos.x, placePos.y, placePos.z) !== BlockTypes.AIR) return;
     
         const playerPos = this.player.position;
         const playerBlockX = Math.floor(playerPos.x);
@@ -387,6 +395,7 @@ class Game {
         const playerBlockZ = Math.floor(playerPos.z);
         const playerHeadY = Math.floor(playerPos.y + this.player.height);
     
+        // Prevent placing a block inside the player's own space
         if (placePos.x === playerBlockX && placePos.z === playerBlockZ &&
             (placePos.y === playerBlockY || placePos.y === playerHeadY)) {
             return;
@@ -395,6 +404,7 @@ class Game {
         this.audioManager.playSound('place', 0.8);
         this.world.setBlock(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         
+        // Add a temporary mesh for immediate visual feedback
         const tempMesh = this.createTemporaryBlockMesh(placePos.x, placePos.y, placePos.z, this.selectedBlockType);
         if (tempMesh) {
             this.scene.add(tempMesh);
@@ -486,7 +496,7 @@ class Game {
         window.addEventListener('resize', this.onWindowResize.bind(this));
         window.addEventListener('beforeunload', () => this.cleanup());
 
-        this.setupDevMenu();
+        this.setupSettingsMenu();
         this.setupKeyBindings();
         this.setupTouchControls();
         this.setupAudio();
@@ -521,36 +531,66 @@ class Game {
                 this.selectBlock(blockTypes[keyIndex]);
                 return;
             }
-            if (e.code === 'KeyE' && !this._devMenuOpen) {
+
+            // --- REFACTORED: Unified menu key handling ---
+            if (e.code === 'KeyE' && !this._settingsOpen) {
                 this._inventoryOpen = !this._inventoryOpen;
                 if (this.inventoryUI) this.inventoryUI.style.display = this._inventoryOpen ? 'block' : 'none';
                 if (this._inventoryOpen && !this.isMobile) document.exitPointerLock();
             }
-        });
-    }
 
-    setupDevMenu() {
-        if (!this.devMenu) return;
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Backslash' && !this._devMenuOpen && !this._inventoryOpen) {
-                this._devMenuOpen = true;
-                this.devMenu.style.display = 'block';
-                if (!this.isMobile) document.exitPointerLock();
-            } else if (e.code === 'Escape') {
-                if (this._devMenuOpen) {
-                    this._devMenuOpen = false;
-                    this.devMenu.style.display = 'none';
-                }
-                if (this._inventoryOpen) {
+            if (e.code === 'Escape') {
+                if (this._settingsOpen) {
+                    this._settingsOpen = false;
+                    this.settingsMenu.style.display = 'none';
+                    if (!this.isMobile && !this._inventoryOpen) document.body.requestPointerLock();
+                } else if (this._inventoryOpen) {
                     this._inventoryOpen = false;
                     if (this.inventoryUI) this.inventoryUI.style.display = 'none';
+                    if (!this.isMobile) document.body.requestPointerLock();
+                } else {
+                    this._settingsOpen = true;
+                    this.settingsMenu.style.display = 'block';
+                    if (!this.isMobile) document.exitPointerLock();
                 }
             }
         });
-        this.closeDevMenuBtn.addEventListener('click', () => {
-            this._devMenuOpen = false;
-            this.devMenu.style.display = 'none';
+    }
+
+    // --- RENAMED and MODIFIED from setupDevMenu ---
+    setupSettingsMenu() {
+        if (!this.settingsMenu) return;
+
+        // Initialize slider values from game state
+        this.fovSlider.value = this.camera.fov;
+        this.fovValue.textContent = this.camera.fov;
+        const initialSensitivity = this.player.mouseSensitivityMultiplier * 50;
+        this.sensitivitySlider.value = initialSensitivity;
+        this.sensitivityValue.textContent = Math.round(initialSensitivity);
+        
+        this.closeSettingsMenuBtn.addEventListener('click', () => {
+            this._settingsOpen = false;
+            this.settingsMenu.style.display = 'none';
+            if (!this.isMobile && !this._inventoryOpen) {
+                 document.body.requestPointerLock();
+            }
         });
+
+        // --- NEW: FOV Slider ---
+        this.fovSlider.addEventListener('input', () => {
+            const fov = parseInt(this.fovSlider.value, 10);
+            this.fovValue.textContent = fov;
+            this.camera.fov = fov;
+            this.camera.updateProjectionMatrix();
+        });
+
+        // --- NEW: Sensitivity Slider ---
+        this.sensitivitySlider.addEventListener('input', () => {
+            const sensitivity = parseInt(this.sensitivitySlider.value, 10);
+            this.sensitivityValue.textContent = sensitivity;
+            this.player.setMouseSensitivity(sensitivity);
+        });
+        
         this.toggleFlyBtn.addEventListener('click', () => {
             const isFlying = this.player.toggleFly();
             this.toggleFlyBtn.textContent = `Toggle Fly (${isFlying ? 'On' : 'Off'})`;
@@ -686,7 +726,7 @@ class Game {
 
         this.audioManager.update(deltaTime);
 
-        if (!this._devMenuOpen && !this._inventoryOpen) {
+        if (!this._settingsOpen && !this._inventoryOpen) {
             this.player.update(deltaTime, this.isMobile ? this.touchState.moveVector : null);
             this.mobManager.update(deltaTime, this.player.position);
         }
