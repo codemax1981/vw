@@ -34,15 +34,8 @@ body, html {
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
-#hud > div {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-size: 14px;
-}
-
 #crosshair {
+    position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -53,28 +46,37 @@ body, html {
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
 }
 
-#fps {
+/* MODIFIED: New compact game info container */
+#gameInfo {
+    position: absolute;
     top: 10px;
     left: 10px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
 }
 
-#position {
-    top: 45px;
-    left: 10px;
-}
-
-#chunkInfo {
-    top: 80px;
-    left: 10px;
+/* Make time element slightly more prominent */
+#time {
+    font-weight: bold;
+    color: white;
+    font-size: 14px;
 }
 
 #instructions {
+    position: absolute;
     bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
     font-size: 12px;
     line-height: 1.4;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 4px 8px;
+    border-radius: 4px;
 }
 
 /* Selected Block Indicator */
@@ -332,4 +334,13 @@ body.loaded #loading {
     #instructions {
         display: none;
     }
+
+    /* MODIFIED: Make game info even more compact on mobile */
+    #gameInfo {
+        font-size: 10px;
+        padding: 4px 8px;
+        top: 5px;
+        left: 5px;
+    }
+    #time { font-size: 11px; }
 }

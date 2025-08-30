@@ -3,7 +3,6 @@
 import { BlockTypes } from './utils.js';
 
 export class Player {
-    // MODIFIED: Accept isMobile flag in the constructor
     constructor(camera, world, isMobile = false) {
         this.camera = camera;
         this.world = world;
@@ -18,8 +17,10 @@ export class Player {
         this.jumpSpeed = 8.0;
         this.gravity = -20.0;
         
-        // MODIFIED: Set sensitivity based on device type
-        this.mouseSensitivity = isMobile ? 0.1 : 0.010;
+        // Set sensitivity based on device type:
+        // - 0.1 for fast mobile touch controls
+        // - 0.002 for the original, slower desktop mouse controls
+        this.mouseSensitivity = isMobile ? 0.1 : 0.002;
         
         // Player dimensions
         this.width = 0.6;

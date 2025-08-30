@@ -715,7 +715,7 @@ class Game {
     updateWorldChunks() {
         const loadedCount = this.world.updateLoadedChunks(this.player.position.x, this.player.position.z);
         const { x, z } = worldToChunkCoords(this.player.position.x, this.player.position.z);
-        this.hud.chunkInfo.textContent = `Chunk: (${x}, ${z}) | Loaded: ${loadedCount}`;
+        this.hud.chunkInfo.textContent = `Chunk: ${x}, ${z} (${loadedCount} loaded)`;
     }
 
     updateChunkMeshes() {
@@ -758,11 +758,11 @@ class Game {
     }
 
     updateHUD(deltaTime) {
-        this.hud.fps.textContent = `FPS: ${Math.round(1 / deltaTime)}`;
+        this.hud.fps.textContent = `${Math.round(1 / deltaTime)} FPS`;
         const pos = this.player.position;
-        this.hud.position.textContent = `Pos: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
+        this.hud.position.textContent = `XYZ: ${pos.x.toFixed(1)} / ${pos.y.toFixed(1)} / ${pos.z.toFixed(1)}`;
         if (this.timeManager) {
-            this.hud.time.textContent = `Time: ${this.timeManager.getFormattedTime()}`;
+            this.hud.time.textContent = `${this.timeManager.getFormattedTime()}`;
         }
     }
 

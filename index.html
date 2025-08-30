@@ -22,11 +22,13 @@
     <!-- Game HUD -->
     <div id="hud">
         <div id="crosshair">+</div>
-        <div id="fps">FPS: 0</div>
-        <div id="position">Pos: (0, 0, 0)</div>
-        <div id="time">Time: 07:00</div>
-        <div id="chunkInfo">Chunk: (0, 0) | Loaded: 0</div>
-        
+        <!-- MODIFIED: Grouped game info into a single, more compact container -->
+        <div id="gameInfo">
+            <div id="time">07:00</div>
+            <div id="fps">0 FPS</div>
+            <div id="position">XYZ: 0.0 / 0.0 / 0.0</div>
+            <div id="chunkInfo">Chunk: 0, 0 (0 loaded)</div>
+        </div>
         
         <div id="instructions">
             WASD: Move | Mouse: Look | Left Click: Break | Right Click: Place<br>
