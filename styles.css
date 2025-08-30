@@ -205,7 +205,11 @@ body, html {
     left: 0;
     width: 100%;
     height: 100%;
-    background: #2C3E50;
+    background: 
+        radial-gradient(ellipse at top, #1a1a2e 0%, #16213e 50%, #0f3460 100%),
+        linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+    background-size: 100% 100%, 400% 400%;
+    animation: cosmicShift 12s ease infinite;
     color: white;
     display: flex;
     flex-direction: column;
@@ -216,37 +220,302 @@ body, html {
     font-weight: bold;
     transition: opacity 0.8s ease-in-out, visibility 0.8s;
     visibility: visible;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+}
+
+/* Cosmic background layers */
+#loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 15% 20%, rgba(255,255,255,0.15) 1px, transparent 2px),
+        radial-gradient(circle at 85% 30%, rgba(255,255,255,0.12) 1px, transparent 2px),
+        radial-gradient(circle at 35% 70%, rgba(255,255,255,0.1) 1px, transparent 2px),
+        radial-gradient(circle at 65% 80%, rgba(255,255,255,0.08) 1px, transparent 2px),
+        radial-gradient(circle at 25% 90%, rgba(135,206,235,0.2) 1px, transparent 2px),
+        radial-gradient(circle at 75% 15%, rgba(255,182,193,0.15) 1px, transparent 2px);
+    background-size: 80px 80px, 120px 120px, 60px 60px, 100px 100px, 150px 150px, 90px 90px;
+    animation: starField 25s linear infinite;
+}
+
+/* Floating geometric shapes */
+#loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        conic-gradient(from 0deg at 20% 30%, transparent 0deg, rgba(255,255,255,0.05) 90deg, transparent 180deg),
+        conic-gradient(from 45deg at 80% 70%, transparent 0deg, rgba(135,206,235,0.08) 60deg, transparent 120deg),
+        conic-gradient(from 90deg at 40% 80%, transparent 0deg, rgba(255,182,193,0.06) 120deg, transparent 240deg);
+    background-size: 200px 200px, 300px 300px, 250px 250px;
+    animation: geometricFloat 20s ease-in-out infinite;
+}
+
+@keyframes cosmicShift {
+    0%, 100% { 
+        background-position: 0% 0%, 0% 50%; 
+        filter: hue-rotate(0deg) saturate(1);
+    }
+    25% { 
+        background-position: 0% 0%, 25% 75%; 
+        filter: hue-rotate(45deg) saturate(1.2);
+    }
+    50% { 
+        background-position: 0% 0%, 50% 100%; 
+        filter: hue-rotate(90deg) saturate(1.4);
+    }
+    75% { 
+        background-position: 0% 0%, 75% 25%; 
+        filter: hue-rotate(180deg) saturate(1.1);
+    }
+}
+
+@keyframes starField {
+    0% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+    25% { transform: translateY(-30px) translateX(20px) rotate(90deg); }
+    50% { transform: translateY(0px) translateX(-15px) rotate(180deg); }
+    75% { transform: translateY(25px) translateX(10px) rotate(270deg); }
+    100% { transform: translateY(0px) translateX(0px) rotate(360deg); }
+}
+
+@keyframes geometricFloat {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.3; }
+    33% { transform: scale(1.1) rotate(120deg); opacity: 0.5; }
+    66% { transform: scale(0.9) rotate(240deg); opacity: 0.4; }
+}
+
+@keyframes titleHologram {
+    0%, 100% { 
+        text-shadow: 
+            0 0 10px rgba(255,255,255,1),
+            0 0 20px rgba(135,206,235,0.8),
+            0 0 40px rgba(255,182,193,0.6),
+            0 0 80px rgba(147,112,219,0.4),
+            0 5px 15px rgba(0,0,0,0.3);
+        transform: perspective(500px) rotateX(0deg) rotateY(0deg);
+    }
+    25% { 
+        text-shadow: 
+            0 0 15px rgba(255,255,255,1.2),
+            0 0 30px rgba(255,182,193,1),
+            0 0 60px rgba(135,206,235,0.8),
+            0 0 100px rgba(147,112,219,0.6),
+            0 5px 20px rgba(0,0,0,0.4);
+        transform: perspective(500px) rotateX(2deg) rotateY(-1deg);
+    }
+    50% { 
+        text-shadow: 
+            0 0 20px rgba(255,255,255,1.5),
+            0 0 40px rgba(147,112,219,1),
+            0 0 80px rgba(255,182,193,0.8),
+            0 0 120px rgba(135,206,235,0.6),
+            0 5px 25px rgba(0,0,0,0.5);
+        transform: perspective(500px) rotateX(-1deg) rotateY(2deg);
+    }
+    75% { 
+        text-shadow: 
+            0 0 25px rgba(255,255,255,1.3),
+            0 0 50px rgba(135,206,235,1),
+            0 0 100px rgba(147,112,219,0.8),
+            0 0 140px rgba(255,182,193,0.6),
+            0 5px 30px rgba(0,0,0,0.4);
+        transform: perspective(500px) rotateX(1deg) rotateY(-2deg);
+    }
+}
+
+@keyframes titlePulse {
+    0%, 100% { transform: scale(1) translateZ(0); }
+    50% { transform: scale(1.08) translateZ(10px); }
+}
+
+@keyframes letterFloat {
+    0%, 100% { transform: translateY(0px) rotateZ(0deg); }
+    50% { transform: translateY(-8px) rotateZ(2deg); }
 }
 
 .loading-title {
-    margin-bottom: 30px;
-    font-size: 48px;
-    letter-spacing: 2px;
-    text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+    margin-bottom: 60px;
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    background: linear-gradient(45deg, #ffffff, #87ceeb, #ffb6c1, #dda0dd, #ffffff);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: 
+        titleHologram 4s ease-in-out infinite,
+        cosmicShift 6s ease infinite,
+        titlePulse 3s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    display: inline-block;
+    filter: drop-shadow(0 0 20px rgba(255,255,255,0.3));
+}
+
+.loading-title::before {
+    content: 'VOXEL WORLD';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: scanLine 2s linear infinite;
+}
+
+@keyframes scanLine {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
 #progressBarContainer {
-    width: 300px;
-    height: 20px;
-    background-color: rgba(0, 0, 0, 0.3);
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    border-radius: 10px;
+    width: 500px;
+    height: 12px;
+    background: linear-gradient(90deg, rgba(0,0,0,0.4), rgba(0,0,0,0.2), rgba(0,0,0,0.4));
+    border-radius: 25px;
     overflow: hidden;
+    position: relative;
+    box-shadow: 
+        inset 0 3px 6px rgba(0,0,0,0.4),
+        0 3px 12px rgba(0,0,0,0.3),
+        0 0 20px rgba(135,206,235,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+#progressBarContainer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), rgba(135,206,235,0.3), rgba(255,255,255,0.4), transparent);
+    animation: shimmerWave 3s infinite;
+}
+
+#progressBarContainer::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    right: 1px;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    border-radius: 20px;
+    animation: topGleam 2s ease-in-out infinite;
+}
+
+@keyframes shimmerWave {
+    0% { left: -100%; opacity: 0; }
+    50% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+@keyframes topGleam {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
 }
 
 #progressBar {
     width: 0%;
     height: 100%;
-    background-color: #87CEEB;
-    border-radius: 8px;
-    transition: width 0.3s ease-out;
+    background: 
+        linear-gradient(90deg, 
+            #00d2ff 0%, 
+            #3a7bd5 25%, 
+            #00d2ff 50%, 
+            #3a7bd5 75%, 
+            #00d2ff 100%
+        );
+    background-size: 200% 100%;
+    border-radius: 25px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: progressEnergy 2s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+#progressBar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+    animation: progressSpark 1.5s infinite;
+}
+
+@keyframes progressEnergy {
+    0%, 100% {
+        box-shadow: 
+            0 0 15px rgba(0,210,255,0.6),
+            0 0 30px rgba(58,123,213,0.4),
+            0 0 45px rgba(0,210,255,0.2),
+            inset 0 2px 0 rgba(255,255,255,0.3),
+            inset 0 -2px 4px rgba(0,0,0,0.2);
+        background-position: 0% 50%;
+        filter: brightness(1) saturate(1);
+    }
+    50% {
+        box-shadow: 
+            0 0 25px rgba(0,210,255,0.8),
+            0 0 50px rgba(58,123,213,0.6),
+            0 0 75px rgba(0,210,255,0.4),
+            inset 0 2px 0 rgba(255,255,255,0.5),
+            inset 0 -2px 6px rgba(0,0,0,0.3);
+        background-position: 100% 50%;
+        filter: brightness(1.2) saturate(1.3);
+    }
+}
+
+@keyframes progressSpark {
+    0% { left: -100%; }
+    100% { left: 100%; }
 }
 
 #loadingProgress {
-    margin-top: 20px;
-    font-size: 16px;
-    opacity: 0.8;
-    font-weight: normal;
+    margin-top: 40px;
+    font-size: 20px;
+    font-weight: 400;
+    letter-spacing: 2px;
+    opacity: 0.95;
+    animation: textFloat 3s ease-in-out infinite, letterFloat 2s ease-in-out infinite;
+    text-shadow: 
+        0 0 10px rgba(255,255,255,0.8),
+        0 2px 8px rgba(0,0,0,0.4);
+    position: relative;
+}
+
+#loadingProgress::after {
+    content: '...';
+    animation: dots 1.5s steps(3, end) infinite;
+}
+
+@keyframes textFloat {
+    0%, 100% { transform: translateY(0px); opacity: 0.9; }
+    50% { transform: translateY(-5px); opacity: 1; }
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
 }
 
 /* Hide loading when game starts */
